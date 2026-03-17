@@ -1,11 +1,11 @@
-package host.plas.exampleproject.config;
+package host.plas.furyspeedrunning.config;
 
 import gg.drak.thebase.storage.resources.flat.simple.SimpleConfiguration;
-import host.plas.exampleproject.ExampleProject;
+import host.plas.furyspeedrunning.FurySpeedrunning;
 
 public class MainConfig extends SimpleConfiguration {
     public MainConfig() {
-        super("config.yml", ExampleProject.getInstance(), false);
+        super("config.yml", FurySpeedrunning.getInstance(), false);
     }
 
     @Override

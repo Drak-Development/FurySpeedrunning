@@ -1,7 +1,7 @@
-package host.plas.exampleproject.events;
+package host.plas.furyspeedrunning.events;
 
-import host.plas.exampleproject.data.PlayerData;
-import host.plas.exampleproject.data.PlayerManager;
+import host.plas.furyspeedrunning.data.PlayerData;
+import host.plas.furyspeedrunning.data.PlayerManager;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerJoinEvent;

@@ -1,8 +1,8 @@
-package host.plas.exampleproject.events.own;
+package host.plas.furyspeedrunning.events.own;
 
 import gg.drak.thebase.events.components.BaseEvent;
 import host.plas.bou.BukkitOfUtils;
-import host.plas.exampleproject.ExampleProject;
+import host.plas.furyspeedrunning.FurySpeedrunning;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,8 +12,8 @@ public class OwnEvent extends BaseEvent {
         super();
     }
 
-    public ExampleProject getPlugin() {
-        return ExampleProject.getInstance();
+    public FurySpeedrunning getPlugin() {
+        return FurySpeedrunning.getInstance();
     }
 
     public BukkitOfUtils getBou() {
