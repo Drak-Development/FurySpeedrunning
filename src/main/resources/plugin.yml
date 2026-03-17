@@ -9,3 +9,17 @@ folia-supported: true
 
 depend:
   - BukkitOfUtils
+
+commands:
+  managegame:
+    description: Manage the speedrun game
+    usage: /managegame <start|stop>
+    permission: furyspeedrunning.manage
+  playas:
+    description: Set your role for the speedrun
+    usage: /playas <player|spectator>
+
+permissions:
+  furyspeedrunning.manage:
+    description: Allows starting and stopping speedrun games
+    default: op

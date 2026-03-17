@@ -1,10 +1,16 @@
 package host.plas.furyspeedrunning;
 
 import host.plas.bou.BetterPlugin;
+import host.plas.furyspeedrunning.commands.ManageGameCommand;
+import host.plas.furyspeedrunning.commands.PlayAsCommand;
 import host.plas.furyspeedrunning.config.MainConfig;
-import host.plas.furyspeedrunning.events.MainListener;
+import host.plas.furyspeedrunning.events.*;
+import host.plas.furyspeedrunning.world.LobbyManager;
+import host.plas.furyspeedrunning.world.WorldManager;
 import lombok.Getter;
 import lombok.Setter;
+import mc.obliviate.inventory.InventoryAPI;
+import org.bukkit.command.PluginCommand;
 
 @Getter @Setter
 public final class FurySpeedrunning extends BetterPlugin {
@@ -15,6 +21,18 @@ public final class FurySpeedrunning extends BetterPlugin {
 
     @Getter @Setter
     private static MainListener mainListener;
+    @Getter @Setter
+    private static ItemProtectionListener itemProtectionListener;
+    @Getter @Setter
+    private static SharedInventoryListener sharedInventoryListener;
+    @Getter @Setter
+    private static SharedHealthListener sharedHealthListener;
+    @Getter @Setter
+    private static SpectatorListener spectatorListener;
+    @Getter @Setter
+    private static PortalListener portalListener;
+    @Getter @Setter
+    private static DragonListener dragonListener;
 
     public FurySpeedrunning() {
         super();
@@ -22,16 +40,56 @@ public final class FurySpeedrunning extends BetterPlugin {
 
     @Override
     public void onBaseEnabled() {
-        // Plugin startup logic
-        setInstance(this); // Set the instance of the plugin. // For use in other classes.
+        setInstance(this);
 
-        setMainConfig(new MainConfig()); // Instantiate the main config and set it.
+        // Initialize ObliviateInvs GUI API
+        new InventoryAPI(this).init();
 
-        setMainListener(new MainListener()); // Instantiate the main listener and set it.
+        // Config
+        setMainConfig(new MainConfig());
+
+        // Clean up stale worlds from previous runs
+        WorldManager.cleanupStaleWorlds();
+
+        // Create lobby world
+        LobbyManager.createLobbyWorld();
+
+        // Register listeners
+        setMainListener(new MainListener());
+        setItemProtectionListener(new ItemProtectionListener());
+        setSharedInventoryListener(new SharedInventoryListener());
+        setSharedHealthListener(new SharedHealthListener());
+        setSpectatorListener(new SpectatorListener());
+        setPortalListener(new PortalListener());
+        setDragonListener(new DragonListener());
+
+        // Register commands
+        registerCommand("managegame", new ManageGameCommand());
+        registerCommand("playas", new PlayAsCommand());
+
+        logInfo("&aFurySpeedrunning enabled!");
     }
 
     @Override
     public void onBaseDisable() {
-        // Plugin shutdown logic
+        // Stop any running game
+        if (host.plas.furyspeedrunning.data.GameManager.getState() ==
+                host.plas.furyspeedrunning.enums.GameState.PLAYING) {
+            host.plas.furyspeedrunning.data.GameManager.stopGame();
+        }
+
+        logInfo("&cFurySpeedrunning disabled.");
+    }
+
+    private void registerCommand(String name, Object executor) {
+        PluginCommand cmd = getCommand(name);
+        if (cmd != null) {
+            cmd.setExecutor((org.bukkit.command.CommandExecutor) executor);
+            if (executor instanceof org.bukkit.command.TabCompleter) {
+                cmd.setTabCompleter((org.bukkit.command.TabCompleter) executor);
+            }
+        } else {
+            logWarning("Command '" + name + "' not found in plugin.yml!");
+        }
     }
 }

@@ -56,6 +56,8 @@ repositories {
     // PaperMC
     maven { url 'https://repo.papermc.io/repository/maven-snapshots/' }
     maven { url 'https://repo.papermc.io/repository/maven-public/' }
+    // JitPack (for BukkitOfUtils transitive deps)
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {

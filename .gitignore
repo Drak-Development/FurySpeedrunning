@@ -121,3 +121,4 @@ run/
 
 /target/
 /.fastRequest/
+/.claude/
