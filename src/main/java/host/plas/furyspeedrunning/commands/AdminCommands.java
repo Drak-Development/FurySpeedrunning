@@ -36,6 +36,8 @@ public class AdminCommands implements CommandExecutor, TabCompleter {
                 return handleCenter(sender);
             case "setlobby":
                 return handleSetLobby(sender);
+            case "lobby":
+                return handleLobby(sender);
             default:
                 return false;
         }
@@ -205,6 +207,18 @@ public class AdminCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage("\u00A7aLobby spawn set to \u00A7e" +
                 String.format("%.1f, %.1f, %.1f", loc.getX(), loc.getY(), loc.getZ()) +
                 "\u00A7a in world \u00A7e" + loc.getWorld().getName());
+        return true;
+    }
+
+    private boolean handleLobby(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("\u00A7cOnly players can use this command.");
+            return true;
+        }
+        Player player = (Player) sender;
+        LobbyManager.sendToLobby(player);
+        LobbyManager.giveLobbyItems(player);
+        player.sendMessage("\u00A7aTeleported to the lobby.");
         return true;
     }
 

@@ -2,18 +2,16 @@ package host.plas.furyspeedrunning.world;
 
 import host.plas.furyspeedrunning.FurySpeedrunning;
 import lombok.Getter;
+import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
-import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
+import org.bukkit.entity.Player;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class WorldManager {
     @Getter
@@ -23,99 +21,69 @@ public class WorldManager {
     @Getter
     private static World end;
 
+    @Getter
     private static String currentPrefix;
 
+    @Getter @Setter
+    private static long currentSeed;
+
+    /**
+     * Creates game worlds — uses pre-generated templates if available, otherwise generates fresh.
+     */
     public static void createGameWorlds(long seed) {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
+        currentSeed = seed;
 
-        overworld = new WorldCreator(currentPrefix + "_overworld")
-                .seed(seed)
-                .environment(World.Environment.NORMAL)
-                .type(WorldType.NORMAL)
-                .createWorld();
+        String owName = currentPrefix + "_overworld";
+        String nName = currentPrefix + "_nether";
+        String eName = currentPrefix + "_the_end";
 
-        nether = new WorldCreator(currentPrefix + "_nether")
-                .seed(seed)
-                .environment(World.Environment.NETHER)
-                .type(WorldType.NORMAL)
-                .createWorld();
+        boolean usedTemplate = WorldTemplateManager.createFromTemplate(seed, owName, nName, eName);
 
-        end = new WorldCreator(currentPrefix + "_the_end")
-                .seed(seed)
-                .environment(World.Environment.THE_END)
-                .type(WorldType.NORMAL)
-                .createWorld();
+        // Load worlds (from template copy or fresh generation)
+        overworld = new WorldCreator(owName)
+                .seed(seed).environment(World.Environment.NORMAL)
+                .type(WorldType.NORMAL).createWorld();
+        nether = new WorldCreator(nName)
+                .seed(seed).environment(World.Environment.NETHER)
+                .type(WorldType.NORMAL).createWorld();
+        end = new WorldCreator(eName)
+                .seed(seed).environment(World.Environment.THE_END)
+                .type(WorldType.NORMAL).createWorld();
 
-        if (overworld != null) {
-            overworld.setDifficulty(Difficulty.NORMAL);
-            setBooleanRule(overworld, "announceAdvancements", false);
-        }
-        if (nether != null) {
-            nether.setDifficulty(Difficulty.NORMAL);
-            setBooleanRule(nether, "announceAdvancements", false);
-        }
-        if (end != null) {
-            end.setDifficulty(Difficulty.NORMAL);
-            setBooleanRule(end, "announceAdvancements", false);
+        if (usedTemplate) {
+            plugin.logInfo("&aGame worlds loaded from template for seed &b" + seed);
+        } else {
+            plugin.logInfo("&eNo template for seed " + seed + " \u2014 generated fresh.");
         }
 
-        plugin.logInfo("&aGame worlds created: " + currentPrefix);
+        configureGameWorld(overworld);
+        configureGameWorld(nether);
+        configureGameWorld(end);
+
+        plugin.logInfo("&aGame worlds ready: " + currentPrefix);
+    }
+
+    private static void configureGameWorld(World world) {
+        if (world == null) return;
+        world.setDifficulty(Difficulty.NORMAL);
+        setBooleanRule(world, "announceAdvancements", false);
     }
 
     @SuppressWarnings({"unchecked", "removal"})
-    private static void setBooleanRule(World world, String ruleName, boolean value) {
+    static void setBooleanRule(World world, String ruleName, boolean value) {
         GameRule<?> rule = GameRule.getByName(ruleName);
         if (rule != null) {
             world.setGameRule((GameRule<Boolean>) rule, value);
         }
     }
 
-    public static void preGenerateChunks(World world, int radius, Runnable onComplete) {
-        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
-        Location spawn = world.getSpawnLocation();
-        int centerX = spawn.getBlockX() >> 4;
-        int centerZ = spawn.getBlockZ() >> 4;
-
-        // Build flat list of all chunk coords
-        List<int[]> chunks = new ArrayList<>();
-        for (int x = centerX - radius; x <= centerX + radius; x++) {
-            for (int z = centerZ - radius; z <= centerZ + radius; z++) {
-                chunks.add(new int[]{x, z});
-            }
-        }
-
-        int totalChunks = chunks.size();
-        if (totalChunks == 0) {
-            onComplete.run();
-            return;
-        }
-
-        AtomicInteger loaded = new AtomicInteger(0);
-        int batchSize = 4;
-
-        // Process chunks in batches using a repeating task on the main thread
-        // Each tick processes a batch, so we don't freeze the server
-        final int[] index = {0};
-        Bukkit.getScheduler().runTaskTimer(plugin, task -> {
-            int end = Math.min(index[0] + batchSize, totalChunks);
-            for (int i = index[0]; i < end; i++) {
-                int[] coord = chunks.get(i);
-                world.getChunkAt(coord[0], coord[1]).load(true);
-                loaded.incrementAndGet();
-            }
-            index[0] = end;
-
-            if (index[0] >= totalChunks) {
-                task.cancel();
-                plugin.logInfo("&aPre-generated " + totalChunks + " chunks.");
-                onComplete.run();
-            }
-        }, 1L, 1L);
-    }
-
+    /**
+     * Fully cleans up game worlds — moves players out first, then unloads and deletes.
+     */
     public static void deleteGameWorlds() {
-        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        evacuatePlayersFromGameWorlds();
 
         if (overworld != null) {
             String name = overworld.getName();
@@ -139,6 +107,16 @@ public class WorldManager {
         }
 
         currentPrefix = null;
+        currentSeed = 0;
+    }
+
+    private static void evacuatePlayersFromGameWorlds() {
+        World fallback = Bukkit.getWorlds().get(0);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isGameWorld(player.getWorld())) {
+                player.teleport(fallback.getSpawnLocation());
+            }
+        }
     }
 
     public static boolean isGameWorld(World world) {
@@ -172,6 +150,9 @@ public class WorldManager {
         file.delete();
     }
 
+    /**
+     * Cleans up ALL stale game worlds from previous runs.
+     */
     public static void cleanupStaleWorlds() {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         String prefix = plugin.getMainConfig().getWorldPrefix() + "_";
@@ -180,13 +161,20 @@ public class WorldManager {
         if (files == null) return;
 
         for (File file : files) {
-            if (file.isDirectory() && file.getName().startsWith(prefix)) {
-                World world = Bukkit.getWorld(file.getName());
+            if (!file.isDirectory()) continue;
+            String name = file.getName();
+
+            if (name.startsWith(prefix) || name.startsWith("template_gen_")) {
+                World world = Bukkit.getWorld(name);
                 if (world != null) {
+                    World fallback = Bukkit.getWorlds().get(0);
+                    for (Player p : world.getPlayers()) {
+                        p.teleport(fallback.getSpawnLocation());
+                    }
                     Bukkit.unloadWorld(world, false);
                 }
                 deleteRecursive(file);
-                plugin.logInfo("&aCleaned up stale world: " + file.getName());
+                plugin.logInfo("&aCleaned up stale world: " + name);
             }
         }
     }

@@ -5,6 +5,7 @@ import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
 import host.plas.furyspeedrunning.world.LobbyManager;
 import host.plas.furyspeedrunning.world.WorldManager;
+import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import host.plas.furyspeedrunning.managers.InventorySyncManager;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,6 +32,10 @@ public class GameManager {
 
     public static void startGame() {
         if (state == GameState.PLAYING) return;
+        if (WorldTemplateManager.isGenerating()) {
+            Bukkit.broadcastMessage("§cTemplates are still being generated. Please wait.");
+            return;
+        }
 
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         List<Long> seeds = plugin.getMainConfig().getSeeds();
@@ -39,7 +44,8 @@ public class GameManager {
         plugin.logInfo("&aStarting speedrun with seed: &e" + seed);
         Bukkit.broadcastMessage("§e§lPreparing world... §7Please wait.");
 
-        // Create worlds
+        // Create worlds (uses template copy if available)
+        boolean hadTemplate = WorldTemplateManager.hasTemplate(seed);
         WorldManager.createGameWorlds(seed);
         World overworld = WorldManager.getOverworld();
         if (overworld == null) {
@@ -48,40 +54,33 @@ public class GameManager {
             return;
         }
 
-        // Pre-generate chunks, then start
-        int radius = plugin.getMainConfig().getPreGenerateRadius();
-        plugin.logInfo("&aPre-generating chunks in radius " + radius + "...");
+        // Worlds are ready (from template or fresh) — start the game
+        state = GameState.PLAYING;
+        gameStartTime = System.currentTimeMillis();
+        gameCompleted = false;
 
-        WorldManager.preGenerateChunks(overworld, radius, () -> {
-            state = GameState.PLAYING;
-            gameStartTime = System.currentTimeMillis();
-            gameCompleted = false;
+        Location spawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
 
-            Location spawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
+        for (PlayerData data : PlayerManager.getOnlinePlayers()) {
+            Player player = data.getPlayer();
+            if (player == null) continue;
 
-            // Teleport and set up players
-            for (PlayerData data : PlayerManager.getOnlinePlayers()) {
-                Player player = data.getPlayer();
-                if (player == null) continue;
+            player.getInventory().clear();
+            player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
 
-                player.getInventory().clear();
-                player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
-
-                if (data.getRole() == PlayerRole.PLAYER) {
-                    setupPlayerRole(player);
-                } else {
-                    setupSpectatorRole(player);
-                }
-
-                player.teleport(spawn);
+            if (data.getRole() == PlayerRole.PLAYER) {
+                setupPlayerRole(player);
+            } else {
+                setupSpectatorRole(player);
             }
 
-            // Hide spectators from players
-            applySpectatorVisibility();
+            player.teleport(spawn);
+        }
 
-            plugin.logInfo("&a&lSpeedrun started! Seed: &e" + seed);
-            Bukkit.broadcastMessage("§a§lSpeedrun started! §7Good luck!");
-        });
+        applySpectatorVisibility();
+
+        plugin.logInfo("&a&lSpeedrun started! Seed: &e" + seed);
+        Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrun started! \u00A77Good luck!");
     }
 
     public static void stopGame() {

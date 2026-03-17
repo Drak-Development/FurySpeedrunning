@@ -9,21 +9,31 @@ import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
-import java.util.Collections;
+import java.util.Arrays;
 
 public class LobbyManager {
     private static final String LOBBY_WORLD_NAME = "fury_lobby";
-    private static final String GUI_ITEM_MARKER = "\u00A7r\u00A70\u00A7f\u00A7s\u00A7g";
 
     @Getter
     private static World lobbyWorld;
+
+    private static NamespacedKey guiItemKey;
+
+    private static NamespacedKey getGuiItemKey() {
+        if (guiItemKey == null) {
+            guiItemKey = new NamespacedKey(FurySpeedrunning.getInstance(), "gui_item");
+        }
+        return guiItemKey;
+    }
 
     public static void createLobbyWorld() {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
@@ -110,37 +120,41 @@ public class LobbyManager {
 
     public static void giveLobbyItems(Player player) {
         player.getInventory().clear();
-
-        ItemStack menuItem = new ItemStack(Material.NETHER_STAR);
-        ItemMeta meta = menuItem.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName("\u00A7a\u00A7lGame Menu \u00A77(Right-Click)");
-            meta.setLore(Collections.singletonList(GUI_ITEM_MARKER));
-            menuItem.setItemMeta(meta);
-        }
-
-        player.getInventory().setItem(4, menuItem);
+        player.getInventory().setItem(4, createGuiItem(
+                "\u00A7a\u00A7lGame Menu \u00A77(Right-Click)",
+                "\u00A77Click to select your role",
+                "\u00A77or start a speedrun!"
+        ));
     }
 
     public static void giveSpectatorItems(Player player) {
         player.getInventory().clear();
+        player.getInventory().setItem(4, createGuiItem(
+                "\u00A7b\u00A7lSpectate Players \u00A77(Right-Click)",
+                "\u00A77Click to teleport to",
+                "\u00A77active players."
+        ));
+    }
 
-        ItemStack spectatorItem = new ItemStack(Material.NETHER_STAR);
-        ItemMeta meta = spectatorItem.getItemMeta();
+    private static ItemStack createGuiItem(String name, String... lore) {
+        ItemStack item = new ItemStack(Material.NETHER_STAR);
+        ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("\u00A7b\u00A7lSpectate Players \u00A77(Right-Click)");
-            meta.setLore(Collections.singletonList(GUI_ITEM_MARKER));
-            spectatorItem.setItemMeta(meta);
+            meta.setDisplayName(name);
+            if (lore.length > 0) {
+                meta.setLore(Arrays.asList(lore));
+            }
+            meta.getPersistentDataContainer().set(getGuiItemKey(), PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
         }
-
-        player.getInventory().setItem(4, spectatorItem);
+        return item;
     }
 
     public static boolean isGuiItem(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
-        if (meta == null || !meta.hasLore()) return false;
-        return meta.getLore().contains(GUI_ITEM_MARKER);
+        if (meta == null) return false;
+        return meta.getPersistentDataContainer().has(getGuiItemKey(), PersistentDataType.BYTE);
     }
 
     public static void deleteLobbyWorld() {

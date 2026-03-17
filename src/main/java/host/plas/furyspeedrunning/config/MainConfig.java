@@ -16,13 +16,13 @@ public class MainConfig extends SimpleConfiguration {
     public void init() {
         getSeeds();
         getWorldPrefix();
-        getPreGenerateRadius();
         getLobbySpawnX();
         getLobbySpawnY();
         getLobbySpawnZ();
         getLobbySpawnYaw();
         getLobbySpawnPitch();
         getLobbySpawnWorld();
+        getTemplatePreGenRadius();
         getMaxPlayers();
         getGameStartCountdown();
         getPostWinDelay();
@@ -56,11 +56,6 @@ public class MainConfig extends SimpleConfiguration {
         return getOrSetDefault("world.prefix", "speedrun");
     }
 
-    public int getPreGenerateRadius() {
-        reloadResource();
-        return getOrSetDefault("world.pre-generate-radius", 8);
-    }
-
     public double getLobbySpawnX() {
         reloadResource();
         return getOrSetDefault("lobby.spawn.x", 0.5d);
@@ -89,6 +84,11 @@ public class MainConfig extends SimpleConfiguration {
     public String getLobbySpawnWorld() {
         reloadResource();
         return getOrSetDefault("lobby.spawn.world", "");
+    }
+
+    public int getTemplatePreGenRadius() {
+        reloadResource();
+        return getOrSetDefault("world.template-pre-gen-radius", 2000);
     }
 
     public int getMaxPlayers() {

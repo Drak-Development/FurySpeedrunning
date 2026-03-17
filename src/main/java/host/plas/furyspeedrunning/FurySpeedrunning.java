@@ -5,9 +5,12 @@ import host.plas.furyspeedrunning.commands.AdminCommands;
 import host.plas.furyspeedrunning.commands.ManageGameCommand;
 import host.plas.furyspeedrunning.commands.PlayAsCommand;
 import host.plas.furyspeedrunning.config.MainConfig;
+import host.plas.furyspeedrunning.data.GameManager;
+import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.events.*;
 import host.plas.furyspeedrunning.world.LobbyManager;
 import host.plas.furyspeedrunning.world.WorldManager;
+import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import lombok.Getter;
 import lombok.Setter;
 import mc.obliviate.inventory.InventoryAPI;
@@ -49,8 +52,9 @@ public final class FurySpeedrunning extends BetterPlugin {
         // Config
         setMainConfig(new MainConfig());
 
-        // Clean up stale worlds from previous runs
+        // Clean up ALL stale worlds from previous runs / crashes
         WorldManager.cleanupStaleWorlds();
+        WorldTemplateManager.cleanupInterruptedGenerations();
 
         // Create lobby world
         LobbyManager.createLobbyWorld();
@@ -69,19 +73,25 @@ public final class FurySpeedrunning extends BetterPlugin {
         registerCommand("playas", new PlayAsCommand());
 
         AdminCommands adminCommands = new AdminCommands();
-        for (String cmd : new String[]{"heal", "tppos", "tphere", "top", "jump", "center", "setlobby"}) {
+        for (String cmd : new String[]{"heal", "tppos", "tphere", "top", "jump", "center", "setlobby", "lobby"}) {
             registerCommand(cmd, adminCommands);
         }
 
         logInfo("&aFurySpeedrunning enabled!");
+
+        // Start pre-generating templates for all configured seeds
+        // Runs in the background across ticks — does not block startup
+        WorldTemplateManager.generateMissingTemplates(null);
     }
 
     @Override
     public void onBaseDisable() {
-        // Stop any running game
-        if (host.plas.furyspeedrunning.data.GameManager.getState() ==
-                host.plas.furyspeedrunning.enums.GameState.PLAYING) {
-            host.plas.furyspeedrunning.data.GameManager.stopGame();
+        // Cancel any active Chunky template generation
+        WorldTemplateManager.cancelActiveGeneration();
+
+        // Stop any running game and clean up worlds
+        if (GameManager.getState() == GameState.PLAYING) {
+            GameManager.stopGame();
         }
 
         logInfo("&cFurySpeedrunning disabled.");

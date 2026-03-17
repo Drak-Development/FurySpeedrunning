@@ -10,6 +10,9 @@ folia-supported: true
 depend:
   - BukkitOfUtils
 
+softdepend:
+  - Chunky
+
 commands:
   managegame:
     description: Manage the speedrun game
@@ -46,6 +49,9 @@ commands:
     description: Set the lobby spawn location
     usage: /setlobby
     permission: furyspeedrunning.manage
+  lobby:
+    description: Teleport to the lobby
+    usage: /lobby
 
 permissions:
   furyspeedrunning.manage:
