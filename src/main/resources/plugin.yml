@@ -18,8 +18,39 @@ commands:
   playas:
     description: Set your role for the speedrun
     usage: /playas <player|spectator>
+  heal:
+    description: Heal yourself or a player
+    usage: /heal (player)
+    permission: furyspeedrunning.admin
+  tppos:
+    description: Teleport to coordinates
+    usage: /tppos <x> <y> <z> (<yaw> <pitch>)
+    permission: furyspeedrunning.admin
+  tphere:
+    description: Teleport a player to you
+    usage: /tphere <player>
+    permission: furyspeedrunning.admin
+  top:
+    description: Teleport to the highest block
+    usage: /top
+    permission: furyspeedrunning.admin
+  jump:
+    description: Teleport to the block you are looking at
+    usage: /jump
+    permission: furyspeedrunning.admin
+  center:
+    description: Center on the block you are standing on
+    usage: /center
+    permission: furyspeedrunning.admin
+  setlobby:
+    description: Set the lobby spawn location
+    usage: /setlobby
+    permission: furyspeedrunning.manage
 
 permissions:
   furyspeedrunning.manage:
     description: Allows starting and stopping speedrun games
+    default: op
+  furyspeedrunning.admin:
+    description: Allows admin utility commands
     default: op

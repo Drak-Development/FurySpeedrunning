@@ -1,6 +1,7 @@
 package host.plas.furyspeedrunning;
 
 import host.plas.bou.BetterPlugin;
+import host.plas.furyspeedrunning.commands.AdminCommands;
 import host.plas.furyspeedrunning.commands.ManageGameCommand;
 import host.plas.furyspeedrunning.commands.PlayAsCommand;
 import host.plas.furyspeedrunning.config.MainConfig;
@@ -66,6 +67,11 @@ public final class FurySpeedrunning extends BetterPlugin {
         // Register commands
         registerCommand("managegame", new ManageGameCommand());
         registerCommand("playas", new PlayAsCommand());
+
+        AdminCommands adminCommands = new AdminCommands();
+        for (String cmd : new String[]{"heal", "tppos", "tphere", "top", "jump", "center", "setlobby"}) {
+            registerCommand(cmd, adminCommands);
+        }
 
         logInfo("&aFurySpeedrunning enabled!");
     }

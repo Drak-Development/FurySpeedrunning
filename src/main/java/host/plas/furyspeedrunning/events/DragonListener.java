@@ -22,19 +22,13 @@ public class DragonListener extends AbstractConglomerate {
 
         String elapsed = GameManager.getElapsedTime();
 
+        GameManager.setGameCompleted(true);
+
         Bukkit.broadcastMessage("§a§l✦ SPEEDRUN COMPLETE! ✦");
         Bukkit.broadcastMessage("§7The Ender Dragon has been defeated!");
         Bukkit.broadcastMessage("§7Time: §e§l" + elapsed);
+        Bukkit.broadcastMessage("§7Use §e/managegame stop §7to return to the lobby.");
 
-        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
-        plugin.logInfo("&a&lSpeedrun completed in " + elapsed + "!");
-
-        // Return to lobby after delay
-        int delay = plugin.getMainConfig().getPostWinDelay();
-        Bukkit.broadcastMessage("§7Returning to lobby in §e" + delay + "§7 seconds...");
-
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            GameManager.stopGame();
-        }, 20L * delay);
+        FurySpeedrunning.getInstance().logInfo("&a&lSpeedrun completed in " + elapsed + "!");
     }
 }

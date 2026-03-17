@@ -20,6 +20,9 @@ public class MainConfig extends SimpleConfiguration {
         getLobbySpawnX();
         getLobbySpawnY();
         getLobbySpawnZ();
+        getLobbySpawnYaw();
+        getLobbySpawnPitch();
+        getLobbySpawnWorld();
         getMaxPlayers();
         getGameStartCountdown();
         getPostWinDelay();
@@ -71,6 +74,21 @@ public class MainConfig extends SimpleConfiguration {
     public double getLobbySpawnZ() {
         reloadResource();
         return getOrSetDefault("lobby.spawn.z", 0.5d);
+    }
+
+    public double getLobbySpawnYaw() {
+        reloadResource();
+        return getOrSetDefault("lobby.spawn.yaw", 0.0d);
+    }
+
+    public double getLobbySpawnPitch() {
+        reloadResource();
+        return getOrSetDefault("lobby.spawn.pitch", 0.0d);
+    }
+
+    public String getLobbySpawnWorld() {
+        reloadResource();
+        return getOrSetDefault("lobby.spawn.world", "");
     }
 
     public int getMaxPlayers() {

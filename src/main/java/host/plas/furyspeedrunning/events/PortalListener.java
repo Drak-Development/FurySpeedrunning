@@ -37,14 +37,20 @@ public class PortalListener extends AbstractConglomerate {
                 event.setTo(to);
             }
         } else if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL) {
-            // Overworld -> End
             if (from.equals(WorldManager.getOverworld()) && WorldManager.getEnd() != null) {
+                // Overworld -> End
                 Location endSpawn = WorldManager.getEnd().getSpawnLocation();
                 event.setTo(endSpawn);
-            } else if (from.equals(WorldManager.getEnd()) && WorldManager.getOverworld() != null) {
-                // End -> Overworld (end gateway / return portal)
-                Location overworldSpawn = WorldManager.getOverworld().getSpawnLocation();
-                event.setTo(overworldSpawn);
+            } else if (from.equals(WorldManager.getEnd())) {
+                // End -> Overworld (return portal after dragon kill)
+                // Block this — players stay until /managegame stop
+                if (GameManager.isGameCompleted()) {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage("\u00A77Use \u00A7e/managegame stop \u00A77to return to the lobby.");
+                } else if (WorldManager.getOverworld() != null) {
+                    Location overworldSpawn = WorldManager.getOverworld().getSpawnLocation();
+                    event.setTo(overworldSpawn);
+                }
             }
         }
     }

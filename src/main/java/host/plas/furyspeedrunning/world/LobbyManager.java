@@ -87,17 +87,24 @@ public class LobbyManager {
 
     public static Location getLobbySpawn() {
         MainConfig config = FurySpeedrunning.getInstance().getMainConfig();
+        String worldName = config.getLobbySpawnWorld();
+        World world = (worldName != null && !worldName.isEmpty()) ? Bukkit.getWorld(worldName) : lobbyWorld;
+        if (world == null) world = lobbyWorld;
+
         return new Location(
-                lobbyWorld,
+                world,
                 config.getLobbySpawnX(),
                 config.getLobbySpawnY(),
-                config.getLobbySpawnZ()
+                config.getLobbySpawnZ(),
+                (float) config.getLobbySpawnYaw(),
+                (float) config.getLobbySpawnPitch()
         );
     }
 
     public static void sendToLobby(Player player) {
-        if (lobbyWorld == null) return;
-        player.teleport(getLobbySpawn());
+        Location spawn = getLobbySpawn();
+        if (spawn == null || spawn.getWorld() == null) return;
+        player.teleport(spawn);
         player.setGameMode(GameMode.ADVENTURE);
     }
 

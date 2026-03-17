@@ -24,6 +24,9 @@ public class GameManager {
     @Getter @Setter
     private static long gameStartTime = 0;
 
+    @Getter @Setter
+    private static boolean gameCompleted = false;
+
     private static final Random RANDOM = new Random();
 
     public static void startGame() {
@@ -34,12 +37,14 @@ public class GameManager {
         long seed = seeds.get(RANDOM.nextInt(seeds.size()));
 
         plugin.logInfo("&aStarting speedrun with seed: &e" + seed);
+        Bukkit.broadcastMessage("§e§lPreparing world... §7Please wait.");
 
         // Create worlds
         WorldManager.createGameWorlds(seed);
         World overworld = WorldManager.getOverworld();
         if (overworld == null) {
             plugin.logSevere("Failed to create game worlds!");
+            Bukkit.broadcastMessage("§c§lFailed to create game worlds!");
             return;
         }
 
@@ -50,8 +55,9 @@ public class GameManager {
         WorldManager.preGenerateChunks(overworld, radius, () -> {
             state = GameState.PLAYING;
             gameStartTime = System.currentTimeMillis();
+            gameCompleted = false;
 
-            Location spawn = overworld.getSpawnLocation().add(0.5, 0, 0.5);
+            Location spawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
 
             // Teleport and set up players
             for (PlayerData data : PlayerManager.getOnlinePlayers()) {
@@ -59,13 +65,15 @@ public class GameManager {
                 if (player == null) continue;
 
                 player.getInventory().clear();
-                player.teleport(spawn);
+                player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
 
                 if (data.getRole() == PlayerRole.PLAYER) {
                     setupPlayerRole(player);
                 } else {
                     setupSpectatorRole(player);
                 }
+
+                player.teleport(spawn);
             }
 
             // Hide spectators from players
@@ -82,6 +90,7 @@ public class GameManager {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         state = GameState.LOBBY;
         gameStartTime = 0;
+        gameCompleted = false;
 
         // Reset syncing state
         InventorySyncManager.reset();
@@ -125,8 +134,6 @@ public class GameManager {
     }
 
     public static void setupSpectatorRole(Player player) {
-        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
-
         player.setGameMode(GameMode.CREATIVE);
         player.setHealth(player.getMaxHealth());
         player.setFoodLevel(20);

@@ -11,6 +11,8 @@ import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WorldManager {
@@ -75,27 +77,41 @@ public class WorldManager {
         int centerX = spawn.getBlockX() >> 4;
         int centerZ = spawn.getBlockZ() >> 4;
 
-        int totalChunks = (radius * 2 + 1) * (radius * 2 + 1);
-        AtomicInteger loaded = new AtomicInteger(0);
-
-        // Load chunks in batches to avoid blocking the main thread
-        int batchSize = 16;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            for (int x = centerX - radius; x <= centerX + radius; x++) {
-                for (int z = centerZ - radius; z <= centerZ + radius; z++) {
-                    final int cx = x;
-                    final int cz = z;
-                    // Schedule chunk load on main thread
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        world.getChunkAt(cx, cz);
-                        int count = loaded.incrementAndGet();
-                        if (count >= totalChunks) {
-                            onComplete.run();
-                        }
-                    });
-                }
+        // Build flat list of all chunk coords
+        List<int[]> chunks = new ArrayList<>();
+        for (int x = centerX - radius; x <= centerX + radius; x++) {
+            for (int z = centerZ - radius; z <= centerZ + radius; z++) {
+                chunks.add(new int[]{x, z});
             }
-        });
+        }
+
+        int totalChunks = chunks.size();
+        if (totalChunks == 0) {
+            onComplete.run();
+            return;
+        }
+
+        AtomicInteger loaded = new AtomicInteger(0);
+        int batchSize = 4;
+
+        // Process chunks in batches using a repeating task on the main thread
+        // Each tick processes a batch, so we don't freeze the server
+        final int[] index = {0};
+        Bukkit.getScheduler().runTaskTimer(plugin, task -> {
+            int end = Math.min(index[0] + batchSize, totalChunks);
+            for (int i = index[0]; i < end; i++) {
+                int[] coord = chunks.get(i);
+                world.getChunkAt(coord[0], coord[1]).load(true);
+                loaded.incrementAndGet();
+            }
+            index[0] = end;
+
+            if (index[0] >= totalChunks) {
+                task.cancel();
+                plugin.logInfo("&aPre-generated " + totalChunks + " chunks.");
+                onComplete.run();
+            }
+        }, 1L, 1L);
     }
 
     public static void deleteGameWorlds() {
