@@ -13,6 +13,8 @@ depend:
 softdepend:
   - Chunky
 
+api-version: 1.21
+
 commands:
   managegame:
     description: Manage the speedrun game
