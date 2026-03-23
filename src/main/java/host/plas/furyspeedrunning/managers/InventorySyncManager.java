@@ -1,11 +1,13 @@
 package host.plas.furyspeedrunning.managers;
 
+import host.plas.furyspeedrunning.data.PlayerData;
 import host.plas.furyspeedrunning.data.PlayerManager;
 import host.plas.furyspeedrunning.enums.PlayerRole;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class InventorySyncManager {
@@ -15,12 +17,26 @@ public class InventorySyncManager {
         return syncing;
     }
 
+    /**
+     * Returns all online PLAYER and HUNTER role players (everyone who shares inventory/health).
+     */
+    private static List<Player> getGameParticipants() {
+        List<Player> result = new ArrayList<>();
+        for (PlayerData data : PlayerManager.getOnlinePlayers()) {
+            if (data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER) {
+                Player p = data.getPlayer();
+                if (p != null) result.add(p);
+            }
+        }
+        return result;
+    }
+
     public static void syncInventory(Player source) {
         if (syncing) return;
         syncing = true;
 
         try {
-            List<Player> players = PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER);
+            List<Player> players = getGameParticipants();
             PlayerInventory sourceInv = source.getInventory();
 
             for (Player target : players) {
@@ -56,7 +72,7 @@ public class InventorySyncManager {
         syncing = true;
 
         try {
-            List<Player> players = PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER);
+            List<Player> players = getGameParticipants();
             double health = source.getHealth();
             int foodLevel = source.getFoodLevel();
             float saturation = source.getSaturation();
@@ -77,7 +93,7 @@ public class InventorySyncManager {
         syncing = true;
 
         try {
-            List<Player> players = PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER);
+            List<Player> players = getGameParticipants();
             int level = source.getLevel();
             float exp = source.getExp();
 

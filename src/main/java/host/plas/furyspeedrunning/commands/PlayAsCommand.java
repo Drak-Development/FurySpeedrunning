@@ -34,6 +34,7 @@ public class PlayAsCommand implements CommandExecutor, TabCompleter {
 
         if (args.length < 1) {
             player.sendMessage("§cUsage: /playas <player|spectator>");
+            player.sendMessage("§7Note: Hunter role is randomly assigned at game start.");
             return true;
         }
 
@@ -47,7 +48,7 @@ public class PlayAsCommand implements CommandExecutor, TabCompleter {
         switch (role) {
             case "player":
                 data.setRole(PlayerRole.PLAYER);
-                player.sendMessage("§aYou are now set as a §lPlayer§a!");
+                player.sendMessage("§aYou will participate in the next manhunt! §7(Role assigned at start)");
                 break;
 
             case "spectator":
@@ -57,6 +58,7 @@ public class PlayAsCommand implements CommandExecutor, TabCompleter {
 
             default:
                 player.sendMessage("§cUsage: /playas <player|spectator>");
+                player.sendMessage("§7Note: Hunter role is randomly assigned at game start.");
                 break;
         }
 

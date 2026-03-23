@@ -1,118 +1,122 @@
 package host.plas.furyspeedrunning.gui;
 
+import host.plas.bou.gui.InventorySheet;
+import host.plas.bou.gui.screens.ScreenInstance;
 import host.plas.furyspeedrunning.data.GameManager;
 import host.plas.furyspeedrunning.data.PlayerData;
 import host.plas.furyspeedrunning.data.PlayerManager;
 import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
-import mc.obliviate.inventory.Gui;
 import mc.obliviate.inventory.Icon;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.inventory.ItemFlag;
 
-public class LobbyGui extends Gui {
+public class LobbyGui extends ScreenInstance {
 
     public LobbyGui(Player player) {
-        super(player, "lobby-menu", "§6§lGame Menu", 3);
+        super(player, FuryGuiType.LOBBY, buildSheet(player), true);
     }
 
-    @Override
-    public void onOpen(InventoryOpenEvent event) {
-        // Fill background with glass panes
-        fillGui(new Icon(Material.GRAY_STAINED_GLASS_PANE).setName(" "));
+    private static InventorySheet buildSheet(Player player) {
+        InventorySheet sheet = InventorySheet.empty(27);
+
+        // Fill background
+        Icon filler = new Icon(Material.GRAY_STAINED_GLASS_PANE).setName(" ");
+        for (int i = 0; i < 27; i++) {
+            sheet.setIcon(i, filler);
+        }
 
         PlayerData data = PlayerManager.getPlayer(player);
         PlayerRole currentRole = data != null ? data.getRole() : PlayerRole.PLAYER;
 
-        // Player role button (slot 11)
+        // Join game button (slot 11)
         Icon playerIcon = new Icon(Material.DIAMOND_SWORD)
-                .setName("§a§lPlay as Player")
+                .setName("\u00A7a\u00A7lJoin Manhunt")
                 .setLore(
                         " ",
-                        "§7Share inventory and health",
-                        "§7with other players.",
+                        "\u00A77Join the next manhunt game.",
+                        "\u00A77Role assigned at game start:",
+                        "\u00A7a  Speedrunner \u00A77or \u00A7cHunter",
                         " ",
-                        "§7Objective: §fDefeat the Ender Dragon",
+                        "\u00A77Speedrunners share inventory & health.",
+                        "\u00A77The Hunter must eliminate them.",
                         " ",
-                        currentRole == PlayerRole.PLAYER ? "§a▶ Currently Selected" : "§eClick to select"
+                        currentRole == PlayerRole.PLAYER ? "\u00A7a\u25B6 Currently Selected" : "\u00A7eClick to select"
                 )
                 .hideFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
                 .onClick(e -> {
                     if (data != null) {
                         data.setRole(PlayerRole.PLAYER);
-                        player.sendMessage("§aYou are now set as a §lPlayer§a!");
-                        // Refresh GUI
+                        player.sendMessage("\u00A7aYou will participate in the next manhunt!");
                         new LobbyGui(player).open();
                     }
                 });
 
         if (currentRole == PlayerRole.PLAYER) {
-            playerIcon.enchant(Enchantment.UNBREAKING, 1);
+            playerIcon.enchant(Enchantment.DURABILITY, 1);
         }
 
-        addItem(11, playerIcon);
+        sheet.setIcon(11, playerIcon);
 
         // Start game button (slot 13)
         Icon startIcon = new Icon(Material.EMERALD_BLOCK)
-                .setName("§a§lStart Speedrun")
+                .setName("\u00A7a\u00A7lStart Manhunt")
                 .setLore(
                         " ",
-                        "§7Click to begin a new",
-                        "§7speedrun for all players!",
+                        "\u00A77Click to begin a new",
+                        "\u00A77manhunt for all players!",
                         " ",
-                        "§eRequires: §ffuryspeedrunning.manage"
+                        "\u00A77One player will become the Hunter.",
+                        "\u00A77Everyone starts with nothing.",
+                        " ",
+                        "\u00A7eRequires: \u00A7ffuryspeedrunning.manage"
                 )
                 .onClick(e -> {
                     if (!player.hasPermission("furyspeedrunning.manage")) {
-                        player.sendMessage("§cYou don't have permission to start the game!");
+                        player.sendMessage("\u00A7cYou don't have permission to start the game!");
                         return;
                     }
                     if (GameManager.getState() == GameState.PLAYING) {
-                        player.sendMessage("§cA game is already in progress!");
+                        player.sendMessage("\u00A7cA game is already in progress!");
                         return;
                     }
                     player.closeInventory();
-                    player.sendMessage("§aStarting speedrun...");
+                    player.sendMessage("\u00A7aStarting manhunt...");
                     GameManager.startGame();
                 });
 
-        addItem(13, startIcon);
+        sheet.setIcon(13, startIcon);
 
         // Spectator role button (slot 15)
         Icon spectatorIcon = new Icon(Material.ENDER_EYE)
-                .setName("§b§lPlay as Spectator")
+                .setName("\u00A7b\u00A7lPlay as Spectator")
                 .setLore(
                         " ",
-                        "§7Watch players in Creative mode.",
-                        "§7You will be invisible to players.",
+                        "\u00A77Watch players in Creative mode.",
+                        "\u00A77You will be invisible to players.",
                         " ",
-                        "§7Use the Nether Star to teleport",
-                        "§7to active players.",
+                        "\u00A77Use the Nether Star to teleport",
+                        "\u00A77to active players.",
                         " ",
-                        currentRole == PlayerRole.SPECTATOR ? "§a▶ Currently Selected" : "§eClick to select"
+                        currentRole == PlayerRole.SPECTATOR ? "\u00A7a\u25B6 Currently Selected" : "\u00A7eClick to select"
                 )
                 .hideFlags(ItemFlag.HIDE_ENCHANTS)
                 .onClick(e -> {
                     if (data != null) {
                         data.setRole(PlayerRole.SPECTATOR);
-                        player.sendMessage("§bYou are now set as a §lSpectator§b!");
+                        player.sendMessage("\u00A7bYou are now set as a \u00A7lSpectator\u00A7b!");
                         new LobbyGui(player).open();
                     }
                 });
 
         if (currentRole == PlayerRole.SPECTATOR) {
-            spectatorIcon.enchant(Enchantment.UNBREAKING, 1);
+            spectatorIcon.enchant(Enchantment.DURABILITY, 1);
         }
 
-        addItem(15, spectatorIcon);
-    }
+        sheet.setIcon(15, spectatorIcon);
 
-    @Override
-    public boolean onClick(InventoryClickEvent event) {
-        return false; // Cancel all clicks (icons handle their own logic)
+        return sheet;
     }
 }

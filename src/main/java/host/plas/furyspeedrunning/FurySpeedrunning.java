@@ -13,7 +13,6 @@ import host.plas.furyspeedrunning.world.WorldManager;
 import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import lombok.Getter;
 import lombok.Setter;
-import mc.obliviate.inventory.InventoryAPI;
 import org.bukkit.command.PluginCommand;
 
 @Getter @Setter
@@ -37,6 +36,12 @@ public final class FurySpeedrunning extends BetterPlugin {
     private static PortalListener portalListener;
     @Getter @Setter
     private static DragonListener dragonListener;
+    @Getter @Setter
+    private static HunterListener hunterListener;
+    @Getter @Setter
+    private static LootListener lootListener;
+    @Getter @Setter
+    private static MobDropListener mobDropListener;
 
     public FurySpeedrunning() {
         super();
@@ -45,9 +50,6 @@ public final class FurySpeedrunning extends BetterPlugin {
     @Override
     public void onBaseEnabled() {
         setInstance(this);
-
-        // Initialize ObliviateInvs GUI API
-        new InventoryAPI(this).init();
 
         // Config
         setMainConfig(new MainConfig());
@@ -67,6 +69,9 @@ public final class FurySpeedrunning extends BetterPlugin {
         setSpectatorListener(new SpectatorListener());
         setPortalListener(new PortalListener());
         setDragonListener(new DragonListener());
+        setHunterListener(new HunterListener());
+        setLootListener(new LootListener());
+        setMobDropListener(new MobDropListener());
 
         // Register commands
         registerCommand("managegame", new ManageGameCommand());

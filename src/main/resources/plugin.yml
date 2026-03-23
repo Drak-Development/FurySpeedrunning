@@ -5,15 +5,13 @@ main: '${main}'
 authors:
   - Drak
 
-folia-supported: true
-
 depend:
   - BukkitOfUtils
 
 softdepend:
   - Chunky
 
-api-version: 1.21
+api-version: '1.16'
 
 commands:
   managegame:

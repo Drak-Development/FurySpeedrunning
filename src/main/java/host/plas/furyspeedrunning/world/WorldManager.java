@@ -62,13 +62,18 @@ public class WorldManager {
         configureGameWorld(nether);
         configureGameWorld(end);
 
+        // Modify structure spacing for MCSR-style closer structures
+        if (overworld != null) WorldGenModifier.modifyStructureSpacing(overworld);
+        if (nether != null) WorldGenModifier.modifyStructureSpacing(nether);
+        if (end != null) WorldGenModifier.modifyStructureSpacing(end);
+
         plugin.logInfo("&aGame worlds ready: " + currentPrefix);
     }
 
     private static void configureGameWorld(World world) {
         if (world == null) return;
         world.setDifficulty(Difficulty.NORMAL);
-        setBooleanRule(world, "announceAdvancements", false);
+        setBooleanRule(world, "announceAdvancements", true);
     }
 
     @SuppressWarnings({"unchecked", "removal"})

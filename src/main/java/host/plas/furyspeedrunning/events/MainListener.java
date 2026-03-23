@@ -25,16 +25,19 @@ public class MainListener extends AbstractConglomerate {
             LobbyManager.giveLobbyItems(player);
         } else if (GameManager.getState() == GameState.PLAYING) {
             // Reconnecting during a game
-            if (data.getRole() == PlayerRole.PLAYER) {
-                GameManager.setupPlayerRole(player);
-                if (WorldManager.getOverworld() != null) {
-                    player.teleport(WorldManager.getOverworld().getSpawnLocation().add(0.5, 0, 0.5));
-                }
-            } else {
-                GameManager.setupSpectatorRole(player);
-                if (WorldManager.getOverworld() != null) {
-                    player.teleport(WorldManager.getOverworld().getSpawnLocation().add(0.5, 0, 0.5));
-                }
+            switch (data.getRole()) {
+                case PLAYER:
+                    GameManager.setupPlayerRole(player);
+                    break;
+                case HUNTER:
+                    GameManager.setupHunterRole(player);
+                    break;
+                case SPECTATOR:
+                    GameManager.setupSpectatorRole(player);
+                    break;
+            }
+            if (WorldManager.getOverworld() != null) {
+                player.teleport(WorldManager.getOverworld().getSpawnLocation().add(0.5, 0, 0.5));
             }
             // Re-apply spectator visibility
             GameManager.applySpectatorVisibility();

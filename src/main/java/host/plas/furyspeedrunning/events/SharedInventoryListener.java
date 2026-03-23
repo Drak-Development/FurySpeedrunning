@@ -41,9 +41,9 @@ public class SharedInventoryListener extends AbstractConglomerate {
             if (GameManager.getState() != GameState.PLAYING) return;
             if (InventorySyncManager.isSyncing()) return;
 
-            // Find the first online PLAYER-role player and sync from them
+            // Find the first online PLAYER or HUNTER role player and sync from them
             for (PlayerData data : PlayerManager.getOnlinePlayers()) {
-                if (data.getRole() != PlayerRole.PLAYER) continue;
+                if (data.getRole() != PlayerRole.PLAYER && data.getRole() != PlayerRole.HUNTER) continue;
                 Player player = data.getPlayer();
                 if (player != null && player.isOnline()) {
                     InventorySyncManager.syncInventory(player);
@@ -56,7 +56,7 @@ public class SharedInventoryListener extends AbstractConglomerate {
     private boolean isActivePlayer(Player player) {
         if (GameManager.getState() != GameState.PLAYING) return false;
         PlayerData data = PlayerManager.getPlayer(player);
-        return data != null && data.getRole() == PlayerRole.PLAYER;
+        return data != null && (data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER);
     }
 
     private void scheduleSyncNextTick(Player source) {

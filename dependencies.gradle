@@ -4,12 +4,13 @@ ext {
     SHADOW = [
     ]
     ANNO = [
-            'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT',
+            'com.destroystokyo.paper:paper-api:1.16.1-R0.1-SNAPSHOT',
             'gg.drak:BukkitOfUtils:1.18.0',
     ]
     COMP_ONLY = [
-            'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT',
+            'com.destroystokyo.paper:paper-api:1.16.1-R0.1-SNAPSHOT',
             'gg.drak:BukkitOfUtils:1.18.0',
+            'net.kyori:adventure-api:4.17.0',
     ]
     FILES = [
     ]

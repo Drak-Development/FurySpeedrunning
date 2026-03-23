@@ -25,7 +25,7 @@ public class SharedHealthListener extends AbstractConglomerate {
     private boolean isActivePlayer(Player player) {
         if (GameManager.getState() != GameState.PLAYING) return false;
         PlayerData data = PlayerManager.getPlayer(player);
-        return data != null && data.getRole() == PlayerRole.PLAYER;
+        return data != null && (data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -76,20 +76,26 @@ public class SharedHealthListener extends AbstractConglomerate {
         Player player = event.getEntity();
         if (!isActivePlayer(player)) return;
 
-        // All PLAYER-role players die — game over
+        // All participants (speedrunners + hunter) die together — shared health
         event.setKeepInventory(true);
         event.getDrops().clear();
         event.setDroppedExp(0);
 
-        List<Player> teammates = PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER);
-        for (Player teammate : teammates) {
+        // Kill all PLAYER and HUNTER role players
+        for (Player teammate : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER)) {
             if (teammate.equals(player)) continue;
-            if (teammate.getHealth() > 0) {
-                teammate.setHealth(0);
-            }
+            if (teammate.getHealth() > 0) teammate.setHealth(0);
+        }
+        for (Player teammate : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.HUNTER)) {
+            if (teammate.equals(player)) continue;
+            if (teammate.getHealth() > 0) teammate.setHealth(0);
         }
 
-        Bukkit.broadcastMessage("§c§lAll players have died! §7The speedrun has failed.");
+        Bukkit.broadcastMessage("");
+        Bukkit.broadcastMessage("\u00A7c\u00A7l\u2620 SPEEDRUN FAILED! \u2620");
+        Bukkit.broadcastMessage("\u00A77All players have died!");
+        Bukkit.broadcastMessage("\u00A77Time: \u00A7e\u00A7l" + GameManager.getElapsedTime());
+        Bukkit.broadcastMessage("");
 
         // Return to lobby after delay
         Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> {

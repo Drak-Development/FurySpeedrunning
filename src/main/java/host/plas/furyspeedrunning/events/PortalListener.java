@@ -45,8 +45,9 @@ public class PortalListener extends AbstractConglomerate {
                 // End -> Overworld (return portal after dragon kill)
                 // Block this — players stay until /managegame stop
                 if (GameManager.isGameCompleted()) {
+                    // Game auto-stops now, just let them know
                     event.setCancelled(true);
-                    event.getPlayer().sendMessage("\u00A77Use \u00A7e/managegame stop \u00A77to return to the lobby.");
+                    event.getPlayer().sendMessage("\u00A77The game will end shortly. Please wait.");
                 } else if (WorldManager.getOverworld() != null) {
                     Location overworldSpawn = WorldManager.getOverworld().getSpawnLocation();
                     event.setTo(overworldSpawn);

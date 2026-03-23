@@ -26,17 +26,27 @@ public class MainConfig extends SimpleConfiguration {
         getMaxPlayers();
         getGameStartCountdown();
         getPostWinDelay();
+        getLootStringChance();
+        getLootObsidianChance();
+        getMobPearlDropRate();
+        getMobBlazeRodDropRate();
     }
 
     @SuppressWarnings("unchecked")
     public List<Long> getSeeds() {
         reloadResource();
+        // Curated seeds for 1.16 speedrunning — good structure proximity and loot
         List<Long> defaults = Arrays.asList(
-                123456789L,
-                987654321L,
-                -1234567890L,
-                5555555555L,
-                -9876543210L
+                -4530634556500121041L, // Village + ruined portal near spawn
+                6440029834698013982L,  // Close stronghold, nether fortress
+                -1894252613L,          // Village at spawn with blacksmith
+                2483313382402348964L,  // Dual village spawn, close fortress
+                -7866608132722458683L, // Close bastion + fortress combo
+                1935762657302024089L,  // Shipwreck + village near spawn
+                -3294725893620991126L, // Double village, close stronghold
+                5765923602036276498L,  // Ruined portal, village, close end
+                -8767654563534078661L, // Bastion + fortress close, village
+                725729218939607560L    // Good nether, close structures
         );
         Object raw = getOrSetDefault("seeds", defaults);
         if (raw instanceof List) {
@@ -104,5 +114,25 @@ public class MainConfig extends SimpleConfiguration {
     public int getPostWinDelay() {
         reloadResource();
         return getOrSetDefault("game.post-win-delay-seconds", 10);
+    }
+
+    public double getLootStringChance() {
+        reloadResource();
+        return getOrSetDefault("loot.string-chance", 0.40d);
+    }
+
+    public double getLootObsidianChance() {
+        reloadResource();
+        return getOrSetDefault("loot.obsidian-chance", 0.50d);
+    }
+
+    public double getMobPearlDropRate() {
+        reloadResource();
+        return getOrSetDefault("loot.mob-pearl-drop-rate", 0.75d);
+    }
+
+    public double getMobBlazeRodDropRate() {
+        reloadResource();
+        return getOrSetDefault("loot.mob-blaze-rod-drop-rate", 0.80d);
     }
 }
