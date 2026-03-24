@@ -52,6 +52,10 @@ commands:
   lobby:
     description: Teleport to the lobby
     usage: /lobby
+  timer:
+    description: Start or pause the speedrun timer
+    usage: /timer
+    permission: furyspeedrun.admin.timer
 
 permissions:
   furyspeedrunning.manage:
@@ -59,4 +63,7 @@ permissions:
     default: op
   furyspeedrunning.admin:
     description: Allows admin utility commands
+    default: op
+  furyspeedrun.admin.timer:
+    description: Allows starting and pausing the speedrun timer
     default: op

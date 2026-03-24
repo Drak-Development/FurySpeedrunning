@@ -76,31 +76,10 @@ public class SharedHealthListener extends AbstractConglomerate {
         Player player = event.getEntity();
         if (!isActivePlayer(player)) return;
 
-        // All participants (speedrunners + hunter) die together — shared health
+        // Keep inventory on death — shared inventory means drops would desync
         event.setKeepInventory(true);
         event.getDrops().clear();
         event.setDroppedExp(0);
-
-        // Kill all PLAYER and HUNTER role players
-        for (Player teammate : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER)) {
-            if (teammate.equals(player)) continue;
-            if (teammate.getHealth() > 0) teammate.setHealth(0);
-        }
-        for (Player teammate : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.HUNTER)) {
-            if (teammate.equals(player)) continue;
-            if (teammate.getHealth() > 0) teammate.setHealth(0);
-        }
-
-        Bukkit.broadcastMessage("");
-        Bukkit.broadcastMessage("\u00A7c\u00A7l\u2620 SPEEDRUN FAILED! \u2620");
-        Bukkit.broadcastMessage("\u00A77All players have died!");
-        Bukkit.broadcastMessage("\u00A77Time: \u00A7e\u00A7l" + GameManager.getElapsedTime());
-        Bukkit.broadcastMessage("");
-
-        // Return to lobby after delay
-        Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> {
-            GameManager.stopGame();
-        }, 20L * FurySpeedrunning.getInstance().getMainConfig().getPostWinDelay());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -112,7 +91,8 @@ public class SharedHealthListener extends AbstractConglomerate {
         if (data == null) return;
 
         // Respawn in the game world, not default world
-        if (data.getRole() == PlayerRole.PLAYER && host.plas.furyspeedrunning.world.WorldManager.getOverworld() != null) {
+        if ((data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER)
+                && host.plas.furyspeedrunning.world.WorldManager.getOverworld() != null) {
             event.setRespawnLocation(
                     host.plas.furyspeedrunning.world.WorldManager.getOverworld().getSpawnLocation().add(0.5, 0, 0.5)
             );

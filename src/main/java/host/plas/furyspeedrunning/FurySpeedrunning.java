@@ -4,6 +4,7 @@ import host.plas.bou.BetterPlugin;
 import host.plas.furyspeedrunning.commands.AdminCommands;
 import host.plas.furyspeedrunning.commands.ManageGameCommand;
 import host.plas.furyspeedrunning.commands.PlayAsCommand;
+import host.plas.furyspeedrunning.commands.TimerCommand;
 import host.plas.furyspeedrunning.config.MainConfig;
 import host.plas.furyspeedrunning.data.GameManager;
 import host.plas.furyspeedrunning.enums.GameState;
@@ -76,6 +77,7 @@ public final class FurySpeedrunning extends BetterPlugin {
         // Register commands
         registerCommand("managegame", new ManageGameCommand());
         registerCommand("playas", new PlayAsCommand());
+        registerCommand("timer", new TimerCommand());
 
         AdminCommands adminCommands = new AdminCommands();
         for (String cmd : new String[]{"heal", "tppos", "tphere", "top", "jump", "center", "setlobby", "lobby"}) {

@@ -44,13 +44,13 @@ public class HunterListener extends AbstractConglomerate {
 
                 Player nearest = findNearestSpeedrunner(hunter);
                 if (nearest == null) {
-                    updateBossBar(hunter, "\u00A7cNo survivors found", 0.0);
+                    updateBossBar(hunter, "\u00A7cNo players found", 0.0);
                     continue;
                 }
 
                 boolean sameWorld = hunter.getWorld().equals(nearest.getWorld());
                 if (!sameWorld) {
-                    updateBossBar(hunter, "\u00A7cSurvivor in another dimension", 0.5);
+                    updateBossBar(hunter, "\u00A7cNearest player in another dimension", 0.5);
                     continue;
                 }
 
@@ -58,7 +58,7 @@ public class HunterListener extends AbstractConglomerate {
                 String arrow = getDirectionArrow(hunter, nearest);
                 int distInt = (int) Math.round(distance);
 
-                String title = "\u00A7cDistance to Survivor: \u00A7f" + distInt + " blocks \u00A7e" + arrow;
+                String title = "\u00A7cNearest Player: \u00A7f" + distInt + " blocks \u00A7e" + arrow;
                 double progress = Math.max(0.0, Math.min(1.0, 1.0 - (distance / MAX_TRACK_DISTANCE)));
                 updateBossBar(hunter, title, progress);
             }
@@ -94,8 +94,10 @@ public class HunterListener extends AbstractConglomerate {
         double dx = targetLoc.getX() - hunterLoc.getX();
         double dz = targetLoc.getZ() - hunterLoc.getZ();
 
-        // Angle from hunter to target in degrees (0 = south, clockwise)
-        double angleToTarget = Math.toDegrees(Math.atan2(dx, dz));
+        // Angle from hunter to target in degrees, matching Minecraft yaw convention
+        // (0 = south, 90 = west, 180 = north, 270 = east)
+        // Negate dx because Minecraft yaw increases clockwise (south→west) but atan2 increases counter-clockwise
+        double angleToTarget = Math.toDegrees(Math.atan2(-dx, dz));
 
         // Hunter's yaw (0 = south, clockwise)
         double hunterYaw = hunterLoc.getYaw() % 360;

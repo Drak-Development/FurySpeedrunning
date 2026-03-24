@@ -11,11 +11,14 @@ import host.plas.furyspeedrunning.world.WorldManager;
 import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import lombok.Getter;
 import lombok.Setter;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,6 +36,15 @@ public class GameManager {
     private static boolean gameCompleted = false;
 
     private static final Random RANDOM = new Random();
+
+    // Timer system
+    private static final long TIMER_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+    @Getter
+    private static long timerElapsedMs = 0;
+    @Getter
+    private static boolean timerRunning = false;
+    private static long timerLastResumed = 0;
+    private static BukkitTask timerTask;
 
     public static void startGame() {
         if (state == GameState.PLAYING) return;
@@ -52,7 +64,7 @@ public class GameManager {
         }
 
         if (participants.size() < 2) {
-            Bukkit.broadcastMessage("\u00A7cNeed at least 2 non-spectator players to start a manhunt!");
+            Bukkit.broadcastMessage("\u00A7cNeed at least 2 non-spectator players to start!");
             return;
         }
 
@@ -60,7 +72,7 @@ public class GameManager {
         List<Long> seeds = plugin.getMainConfig().getSeeds();
         long seed = seeds.get(RANDOM.nextInt(seeds.size()));
 
-        plugin.logInfo("&aStarting manhunt with seed: &e" + seed);
+        plugin.logInfo("&aStarting speedrun with seed: &e" + seed);
         Bukkit.broadcastMessage("\u00A7e\u00A7lPreparing world... \u00A77Please wait.");
 
         boolean hadTemplate = WorldTemplateManager.hasTemplate(seed);
@@ -72,10 +84,10 @@ public class GameManager {
             return;
         }
 
-        // Assign roles: randomly pick 1 hunter from participants, rest are speedrunners
+        // Assign roles: randomly pick 1 imposter from participants, rest are speedrunners
         Collections.shuffle(participants);
-        PlayerData hunterData = participants.get(0);
-        hunterData.setRole(PlayerRole.HUNTER);
+        PlayerData imposterData = participants.get(0);
+        imposterData.setRole(PlayerRole.HUNTER);
         for (int i = 1; i < participants.size(); i++) {
             participants.get(i).setRole(PlayerRole.PLAYER);
         }
@@ -83,6 +95,12 @@ public class GameManager {
         state = GameState.PLAYING;
         gameStartTime = System.currentTimeMillis();
         gameCompleted = false;
+
+        // Timer starts paused — admin must /timer to start it
+        timerElapsedMs = 0;
+        timerRunning = false;
+        timerLastResumed = 0;
+        startTimerDisplayTask();
 
         // Reset loot tracker
         LootModifier.reset();
@@ -120,25 +138,10 @@ public class GameManager {
                 if (player == null) continue;
                 sendRoleAnnouncement(player, data.getRole());
             }
-
-            // Broadcast roles to chat
-            Player hunter = hunterData.getPlayer();
-            String hunterName = hunter != null ? hunter.getName() : "Unknown";
-            Bukkit.broadcastMessage("");
-            Bukkit.broadcastMessage("\u00A76\u00A7l\u00A7m-----------\u00A7r \u00A7e\u00A7lMANHUNT \u00A76\u00A7l\u00A7m-----------");
-            Bukkit.broadcastMessage("");
-            Bukkit.broadcastMessage("\u00A7c\u00A7lHunter: \u00A7f" + hunterName);
-            Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrunners: \u00A7f" + getSpeedrunnerNames());
-            Bukkit.broadcastMessage("");
-            Bukkit.broadcastMessage("\u00A77Speedrunners must defeat the Ender Dragon.");
-            Bukkit.broadcastMessage("\u00A77The Hunter must eliminate all speedrunners.");
-            Bukkit.broadcastMessage("");
-            Bukkit.broadcastMessage("\u00A76\u00A7l\u00A7m-------------------------------");
-            Bukkit.broadcastMessage("");
         }, 5L);
 
-        plugin.logInfo("&a&lManhunt started! Seed: &e" + seed);
-        Bukkit.broadcastMessage("\u00A7a\u00A7lManhunt started! \u00A77Good luck!");
+        plugin.logInfo("&a&lSpeedrun started! Seed: &e" + seed);
+        Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrun started! \u00A77Beat the dragon in 30 minutes. Good luck!");
     }
 
     public static void stopGame() {
@@ -149,10 +152,11 @@ public class GameManager {
         gameStartTime = 0;
         gameCompleted = false;
 
-        // Reset syncing state, loot tracking, and boss bar
+        // Reset syncing state, loot tracking, boss bar, and timer
         InventorySyncManager.reset();
         LootModifier.reset();
         HunterListener.removeBossBar();
+        stopTimerTask();
 
         // Teleport all players to lobby
         for (PlayerData data : PlayerManager.getOnlinePlayers()) {
@@ -184,8 +188,8 @@ public class GameManager {
         // Delete game worlds
         WorldManager.deleteGameWorlds();
 
-        plugin.logInfo("&c&lManhunt stopped and cleaned up.");
-        Bukkit.broadcastMessage("\u00A7c\u00A7lManhunt ended! \u00A77Returning to lobby.");
+        plugin.logInfo("&c&lSpeedrun stopped and cleaned up.");
+        Bukkit.broadcastMessage("\u00A7c\u00A7lSpeedrun ended! \u00A77Returning to lobby.");
     }
 
     public static void setupPlayerRole(Player player) {
@@ -238,25 +242,19 @@ public class GameManager {
     private static void sendRoleAnnouncement(Player player, PlayerRole role) {
         switch (role) {
             case PLAYER:
-                player.sendTitle(
-                        "\u00A7a\u00A7lSPEEDRUNNER",
-                        "\u00A77Defeat the Ender Dragon to win!",
-                        10, 60, 20
-                );
-                player.sendMessage("\u00A7a\u00A7lYou are a SPEEDRUNNER! \u00A77Kill the Ender Dragon before the hunter gets you.");
                 break;
             case HUNTER:
                 player.sendTitle(
-                        "\u00A7c\u00A7lHUNTER",
-                        "\u00A77Eliminate all speedrunners!",
+                        "\u00A77You are the",
+                        "\u00A7c\u00A7lImposter",
                         10, 60, 20
                 );
-                player.sendMessage("\u00A7c\u00A7lYou are the HUNTER! \u00A77Use the boss bar to track survivors. Sabotage the speedrun!");
+                player.sendMessage("\u00A77\u00A7oYou are an \u00A7c\u00A7o\u00A7lImposter");
                 break;
             case SPECTATOR:
                 player.sendTitle(
                         "\u00A7b\u00A7lSPECTATOR",
-                        "\u00A77Watch the manhunt unfold!",
+                        "\u00A77Watch the speedrun unfold!",
                         10, 60, 20
                 );
                 player.sendMessage("\u00A7b\u00A7lYou are a SPECTATOR! \u00A77Use the Nether Star to teleport to players.");
@@ -285,5 +283,105 @@ public class GameManager {
             return String.format("%02d:%02d:%02d", hours, minutes, seconds);
         }
         return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    // --- Timer system ---
+
+    private static long getCurrentTimerMs() {
+        if (timerRunning) {
+            return timerElapsedMs + (System.currentTimeMillis() - timerLastResumed);
+        }
+        return timerElapsedMs;
+    }
+
+    public static long getRemainingMs() {
+        return Math.max(0, TIMER_DURATION_MS - getCurrentTimerMs());
+    }
+
+    public static String getRemainingFormatted() {
+        long remaining = getRemainingMs();
+        long seconds = (remaining / 1000) % 60;
+        long minutes = (remaining / 1000 / 60) % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    public static void toggleTimer() {
+        if (timerRunning) {
+            pauseTimer();
+        } else {
+            resumeTimer();
+        }
+    }
+
+    public static void resumeTimer() {
+        if (timerRunning) return;
+        timerRunning = true;
+        timerLastResumed = System.currentTimeMillis();
+    }
+
+    public static void pauseTimer() {
+        if (!timerRunning) return;
+        timerElapsedMs += System.currentTimeMillis() - timerLastResumed;
+        timerRunning = false;
+    }
+
+    private static void startTimerDisplayTask() {
+        stopTimerTask();
+        timerTask = Bukkit.getScheduler().runTaskTimer(FurySpeedrunning.getInstance(), () -> {
+            if (state != GameState.PLAYING) return;
+
+            // Check if timer expired
+            if (timerRunning && getRemainingMs() <= 0) {
+                pauseTimer();
+                onTimerExpired();
+                return;
+            }
+
+            // Show action bar to all game participants
+            String remaining = getRemainingFormatted();
+            String status = timerRunning ? "" : " \u00A77(PAUSED)";
+            String actionBarText = "\u00A7e" + remaining + status;
+
+            for (PlayerData data : PlayerManager.getOnlinePlayers()) {
+                if (data.getRole() == PlayerRole.SPECTATOR) continue;
+                Player player = data.getPlayer();
+                if (player != null) {
+                    player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                            TextComponent.fromLegacyText(actionBarText));
+                }
+            }
+        }, 5L, 10L); // Every 10 ticks (500ms) for smooth display
+    }
+
+    private static void stopTimerTask() {
+        if (timerTask != null) {
+            timerTask.cancel();
+            timerTask = null;
+        }
+        timerRunning = false;
+        timerElapsedMs = 0;
+    }
+
+    private static void onTimerExpired() {
+        Bukkit.broadcastMessage("");
+        Bukkit.broadcastMessage("\u00A7c\u00A7l\u23F0 TIME'S UP! \u00A7r\u00A7c30 minutes have passed!");
+        Bukkit.broadcastMessage("\u00A7c\u00A7lThe Imposter wins!");
+        Bukkit.broadcastMessage("");
+
+        // Send titles
+        for (PlayerData data : PlayerManager.getOnlinePlayers()) {
+            Player player = data.getPlayer();
+            if (player == null) continue;
+            if (data.getRole() == PlayerRole.HUNTER) {
+                player.sendTitle("\u00A7a\u00A7lVICTORY!", "\u00A77You sabotaged the speedrun!", 10, 60, 20);
+            } else if (data.getRole() == PlayerRole.PLAYER) {
+                player.sendTitle("\u00A7c\u00A7lDEFEAT!", "\u00A77Time ran out!", 10, 60, 20);
+            }
+        }
+
+        // Auto-stop after delay
+        Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> {
+            GameManager.stopGame();
+        }, 20L * FurySpeedrunning.getInstance().getMainConfig().getPostWinDelay());
     }
 }

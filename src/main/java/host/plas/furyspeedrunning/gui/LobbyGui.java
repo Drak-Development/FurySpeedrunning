@@ -33,15 +33,16 @@ public class LobbyGui extends ScreenInstance {
 
         // Join game button (slot 11)
         Icon playerIcon = new Icon(Material.DIAMOND_SWORD)
-                .setName("\u00A7a\u00A7lJoin Manhunt")
+                .setName("\u00A7a\u00A7lJoin Speedrun")
                 .setLore(
                         " ",
-                        "\u00A77Join the next manhunt game.",
-                        "\u00A77Role assigned at game start:",
-                        "\u00A7a  Speedrunner \u00A77or \u00A7cHunter",
+                        "\u00A77Join the next speedrun game.",
                         " ",
-                        "\u00A77Speedrunners share inventory & health.",
-                        "\u00A77The Hunter must eliminate them.",
+                        "\u00A77All players share inventory & health.",
+                        "\u00A77Beat the Ender Dragon in 30 minutes!",
+                        " ",
+                        "\u00A77But beware... one among you",
+                        "\u00A77is an \u00A7c\u00A7lImposter\u00A77.",
                         " ",
                         currentRole == PlayerRole.PLAYER ? "\u00A7a\u25B6 Currently Selected" : "\u00A7eClick to select"
                 )
@@ -49,7 +50,7 @@ public class LobbyGui extends ScreenInstance {
                 .onClick(e -> {
                     if (data != null) {
                         data.setRole(PlayerRole.PLAYER);
-                        player.sendMessage("\u00A7aYou will participate in the next manhunt!");
+                        player.sendMessage("\u00A7aYou will participate in the next speedrun!");
                         new LobbyGui(player).open();
                     }
                 });
@@ -62,13 +63,13 @@ public class LobbyGui extends ScreenInstance {
 
         // Start game button (slot 13)
         Icon startIcon = new Icon(Material.EMERALD_BLOCK)
-                .setName("\u00A7a\u00A7lStart Manhunt")
+                .setName("\u00A7a\u00A7lStart Speedrun")
                 .setLore(
                         " ",
                         "\u00A77Click to begin a new",
-                        "\u00A77manhunt for all players!",
+                        "\u00A77speedrun for all players!",
                         " ",
-                        "\u00A77One player will become the Hunter.",
+                        "\u00A77One player will secretly be the Imposter.",
                         "\u00A77Everyone starts with nothing.",
                         " ",
                         "\u00A7eRequires: \u00A7ffuryspeedrunning.manage"
@@ -83,7 +84,7 @@ public class LobbyGui extends ScreenInstance {
                         return;
                     }
                     player.closeInventory();
-                    player.sendMessage("\u00A7aStarting manhunt...");
+                    player.sendMessage("\u00A7aStarting speedrun...");
                     GameManager.startGame();
                 });
 

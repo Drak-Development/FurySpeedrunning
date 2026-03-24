@@ -33,6 +33,8 @@ public class InventorySyncManager {
 
     public static void syncInventory(Player source) {
         if (syncing) return;
+        // Don't sync while player is mid-click (item on cursor) — incomplete state would erase items for others
+        if (source.getItemOnCursor() != null && !source.getItemOnCursor().getType().isAir()) return;
         syncing = true;
 
         try {
