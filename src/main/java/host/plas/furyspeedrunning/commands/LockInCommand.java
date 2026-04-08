@@ -5,6 +5,7 @@ import host.plas.furyspeedrunning.data.PlayerData;
 import host.plas.furyspeedrunning.data.PlayerManager;
 import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -26,6 +27,11 @@ public class LockInCommand implements CommandExecutor {
 
         if (GameManager.getState() != GameState.PLAYING) {
             sender.sendMessage("\u00A7cThere is no game in progress!");
+            return true;
+        }
+
+        if (GameManager.getActiveMatchMode() == PluginGameMode.VERSUS) {
+            sender.sendMessage("\u00A7cLock-in votes only apply to coop (imposter) mode.");
             return true;
         }
 

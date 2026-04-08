@@ -64,8 +64,9 @@ public class ManageGameCommand implements CommandExecutor, TabCompleter {
     private void sendStatus(CommandSender sender) {
         sender.sendMessage("\u00A76\u00A7l--- FurySpeedrunning Status ---");
         sender.sendMessage("\u00A77Game state: \u00A7e" + GameManager.getState().name());
-
+        sender.sendMessage("\u00A77Config mode: \u00A7e" + FurySpeedrunning.getMainConfig().getGameMode().name().toLowerCase());
         if (GameManager.getState() == GameState.PLAYING) {
+            sender.sendMessage("\u00A77Active match: \u00A7e" + GameManager.getActiveMatchMode().name().toLowerCase());
             sender.sendMessage("\u00A77Elapsed: \u00A7e" + GameManager.getElapsedTime());
             sender.sendMessage("\u00A77Completed: \u00A7e" + (GameManager.isGameCompleted() ? "Yes" : "No"));
         }

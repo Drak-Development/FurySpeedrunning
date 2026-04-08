@@ -2,6 +2,7 @@ package host.plas.furyspeedrunning.config;
 
 import gg.drak.thebase.storage.resources.flat.simple.SimpleConfiguration;
 import host.plas.furyspeedrunning.FurySpeedrunning;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,6 +36,30 @@ public class MainConfig extends SimpleConfiguration {
         getMobBlazeRodDropRate();
         getPiglinPearlRate();
         getPlayedSeedIndices();
+        getGameMode();
+    }
+
+    /**
+     * {@code coop}: one shared world, imposter / timer / vote.<br>
+     * {@code versus}: exactly two runners, two seed pairs per match (consumes two entries from {@link #getSeedPairs()}), first dragon wins.
+     */
+    public PluginGameMode getGameMode() {
+        reloadResource();
+        String def = "coop";
+        String raw = getOrSetDefault("game.mode", def);
+        if (raw == null) return PluginGameMode.COOP;
+        switch (raw.trim().toLowerCase()) {
+            case "versus":
+            case "vs":
+            case "dual":
+                return PluginGameMode.VERSUS;
+            default:
+                return PluginGameMode.COOP;
+        }
+    }
+
+    public boolean isVersusMode() {
+        return getGameMode() == PluginGameMode.VERSUS;
     }
 
     @SuppressWarnings("unchecked")

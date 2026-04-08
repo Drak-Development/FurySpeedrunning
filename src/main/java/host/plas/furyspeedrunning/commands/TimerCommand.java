@@ -2,6 +2,7 @@ package host.plas.furyspeedrunning.commands;
 
 import host.plas.furyspeedrunning.data.GameManager;
 import host.plas.furyspeedrunning.enums.GameState;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -18,6 +19,11 @@ public class TimerCommand implements CommandExecutor {
 
         if (GameManager.getState() != GameState.PLAYING) {
             sender.sendMessage("\u00A7cNo game is currently running.");
+            return true;
+        }
+
+        if (GameManager.getActiveMatchMode() == PluginGameMode.VERSUS) {
+            sender.sendMessage("\u00A7cThe imposter timer only applies to coop mode. Versus shows elapsed time automatically.");
             return true;
         }
 

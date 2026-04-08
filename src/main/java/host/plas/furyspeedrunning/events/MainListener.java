@@ -7,6 +7,7 @@ import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
 import host.plas.furyspeedrunning.world.LobbyManager;
 import host.plas.furyspeedrunning.world.WorldManager;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -36,7 +37,10 @@ public class MainListener extends AbstractConglomerate {
                     GameManager.setupSpectatorRole(player);
                     break;
             }
-            if (WorldManager.getOverworld() != null) {
+            Location dest = WorldManager.getRunnerRespawnLocation(data.getVersusRunnerIndexOrZero());
+            if (dest != null) {
+                player.teleport(dest);
+            } else if (WorldManager.getOverworld() != null) {
                 player.teleport(WorldManager.getOverworld().getSpawnLocation().add(0.5, 0, 0.5));
             }
             // Re-apply spectator visibility

@@ -3,6 +3,9 @@ package host.plas.furyspeedrunning.data;
 import host.plas.furyspeedrunning.enums.PlayerRole;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,5 +52,10 @@ public class PlayerManager {
 
     public static void clear() {
         PLAYERS.clear();
+    }
+
+    /** All cached {@link PlayerData} (online or offline during an active match). */
+    public static Collection<PlayerData> getRegisteredPlayers() {
+        return Collections.unmodifiableCollection(new ArrayList<>(PLAYERS.values()));
     }
 }

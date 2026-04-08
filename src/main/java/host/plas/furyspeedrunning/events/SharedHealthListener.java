@@ -62,18 +62,19 @@ public class SharedHealthListener extends AbstractConglomerate {
             // Clear master inventory and all players' inventories
             InventorySyncManager.clearMaster();
 
-            // Respawn location: overworld world spawn
-            World overworld = WorldManager.getOverworld();
-            Location respawnLoc = overworld != null
-                    ? overworld.getSpawnLocation().add(0.5, 1, 0.5)
-                    : deathLocation;
-
-            // Teleport all active players to overworld spawn, reset health
             List<Player> participants = getActiveParticipants();
             for (Player p : participants) {
                 p.getInventory().clear();
                 p.getInventory().setArmorContents(new ItemStack[4]);
                 p.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
+                PlayerData pd = PlayerManager.getPlayer(p);
+                Location respawnLoc = pd != null
+                        ? WorldManager.getRunnerRespawnLocation(pd.getVersusRunnerIndexOrZero())
+                        : null;
+                if (respawnLoc == null) {
+                    World ow = WorldManager.getOverworld();
+                    respawnLoc = ow != null ? ow.getSpawnLocation().add(0.5, 1, 0.5) : deathLocation;
+                }
                 p.teleport(respawnLoc);
                 p.setHealth(p.getMaxHealth());
                 p.setFoodLevel(20);
@@ -175,17 +176,19 @@ public class SharedHealthListener extends AbstractConglomerate {
             }
         }, 1L);
 
-        // Clear and teleport all OTHER active players to overworld spawn
-        World overworld = WorldManager.getOverworld();
-        Location respawnLoc = overworld != null
-                ? overworld.getSpawnLocation().add(0.5, 1, 0.5)
-                : deathLocation;
-
         for (Player p : getActiveParticipants()) {
-            if (p.equals(player)) continue; // dying player handled by respawn event
+            if (p.equals(player)) continue;
             p.getInventory().clear();
             p.getInventory().setArmorContents(new ItemStack[4]);
             p.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
+            PlayerData pd = PlayerManager.getPlayer(p);
+            Location respawnLoc = pd != null
+                    ? WorldManager.getRunnerRespawnLocation(pd.getVersusRunnerIndexOrZero())
+                    : null;
+            if (respawnLoc == null) {
+                World ow = WorldManager.getOverworld();
+                respawnLoc = ow != null ? ow.getSpawnLocation().add(0.5, 1, 0.5) : deathLocation;
+            }
             p.teleport(respawnLoc);
             p.setHealth(p.getMaxHealth());
             p.setFoodLevel(20);
@@ -201,11 +204,17 @@ public class SharedHealthListener extends AbstractConglomerate {
         PlayerData data = PlayerManager.getPlayer(player);
         if (data == null) return;
 
+        if (data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER) {
+            Location respawn = WorldManager.getRunnerRespawnLocation(data.getVersusRunnerIndexOrZero());
+            if (respawn != null) {
+                event.setRespawnLocation(respawn);
+            } else if (WorldManager.getOverworld() != null) {
+                event.setRespawnLocation(WorldManager.getOverworld().getSpawnLocation().add(0.5, 1, 0.5));
+            }
+        }
+
         if ((data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER)
-                && WorldManager.getOverworld() != null) {
-            event.setRespawnLocation(
-                    WorldManager.getOverworld().getSpawnLocation().add(0.5, 1, 0.5)
-            );
+                && event.getRespawnLocation() != null) {
 
             // Heal and clear inventory after respawn
             Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> {

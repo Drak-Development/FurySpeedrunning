@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
@@ -14,12 +15,10 @@ import org.bukkit.entity.Player;
 import java.io.File;
 
 public class WorldManager {
+    private static final RunnerWorldBundle[] EMPTY_BUNDLES = new RunnerWorldBundle[0];
+
     @Getter
-    private static World overworld;
-    @Getter
-    private static World nether;
-    @Getter
-    private static World end;
+    private static RunnerWorldBundle[] bundles = EMPTY_BUNDLES;
 
     @Getter
     private static String currentPrefix;
@@ -28,24 +27,102 @@ public class WorldManager {
     private static long currentSeed;
 
     /**
-     * Creates game worlds fresh with the given seed.
+     * Runner 0 overworld (coop world, or first runner in versus).
+     */
+    public static World getOverworld() {
+        return getOverworldForRunner(0);
+    }
+
+    public static World getNether() {
+        return getNetherForRunner(0);
+    }
+
+    public static World getEnd() {
+        return getEndForRunner(0);
+    }
+
+    public static World getOverworldForRunner(int runnerIndex) {
+        RunnerWorldBundle b = getBundle(runnerIndex);
+        return b != null ? b.getOverworld() : null;
+    }
+
+    public static World getNetherForRunner(int runnerIndex) {
+        RunnerWorldBundle b = getBundle(runnerIndex);
+        return b != null ? b.getNether() : null;
+    }
+
+    public static World getEndForRunner(int runnerIndex) {
+        RunnerWorldBundle b = getBundle(runnerIndex);
+        return b != null ? b.getEnd() : null;
+    }
+
+    public static RunnerWorldBundle getBundle(int runnerIndex) {
+        if (bundles == null || runnerIndex < 0 || runnerIndex >= bundles.length) return null;
+        return bundles[runnerIndex];
+    }
+
+    public static int getBundleCount() {
+        return bundles == null ? 0 : bundles.length;
+    }
+
+    public static RunnerWorldBundle findBundleContaining(World world) {
+        if (world == null || bundles == null) return null;
+        for (RunnerWorldBundle b : bundles) {
+            if (b.containsWorld(world)) return b;
+        }
+        return null;
+    }
+
+    public static Location getRunnerRespawnLocation(int runnerIndex) {
+        World ow = getOverworldForRunner(runnerIndex);
+        if (ow == null) return null;
+        return ow.getSpawnLocation().add(0.5, 1, 0.5);
+    }
+
+    /**
+     * Single shared world set (coop). Worlds are named {@code prefix_r0_overworld}, etc.
      */
     public static void createGameWorlds(long seed, long netherSeed) {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
         currentSeed = seed;
 
-        String owName = currentPrefix + "_overworld";
-        String nName = currentPrefix + "_nether";
-        String eName = currentPrefix + "_the_end";
+        RunnerWorldBundle b = createBundleInternal(0, seed, netherSeed);
+        bundles = new RunnerWorldBundle[]{b};
 
-        overworld = new WorldCreator(owName)
+        plugin.logInfo("&aGame worlds created: " + currentPrefix + " (coop)");
+    }
+
+    /**
+     * Two independent world sets for versus. Consumes two seed pairs.
+     */
+    public static void createVersusGameWorlds(long seed0, long nether0, long seed1, long nether1) {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
+        currentSeed = seed0;
+
+        RunnerWorldBundle b0 = createBundleInternal(0, seed0, nether0);
+        RunnerWorldBundle b1 = createBundleInternal(1, seed1, nether1);
+        bundles = new RunnerWorldBundle[]{b0, b1};
+
+        plugin.logInfo("&aVersus game worlds created: " + currentPrefix
+                + " &7| r0 OW: &b" + seed0 + " &7| r1 OW: &b" + seed1);
+    }
+
+    private static RunnerWorldBundle createBundleInternal(int runnerIndex, long seed, long netherSeed) {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        String r = "_r" + runnerIndex;
+        String owName = currentPrefix + r + "_overworld";
+        String nName = currentPrefix + r + "_nether";
+        String eName = currentPrefix + r + "_the_end";
+
+        World overworld = new WorldCreator(owName)
                 .seed(seed).environment(World.Environment.NORMAL)
                 .type(WorldType.NORMAL).createWorld();
-        nether = new WorldCreator(nName)
+        World nether = new WorldCreator(nName)
                 .seed(netherSeed).environment(World.Environment.NETHER)
                 .type(WorldType.NORMAL).createWorld();
-        end = new WorldCreator(eName)
+        World end = new WorldCreator(eName)
                 .seed(seed).environment(World.Environment.THE_END)
                 .type(WorldType.NORMAL).createWorld();
 
@@ -53,12 +130,11 @@ public class WorldManager {
         configureGameWorld(nether);
         configureGameWorld(end);
 
-        // Modify structure spacing for closer structures
         if (overworld != null) WorldGenModifier.modifyStructureSpacing(overworld);
         if (nether != null) WorldGenModifier.modifyStructureSpacing(nether);
         if (end != null) WorldGenModifier.modifyStructureSpacing(end);
 
-        plugin.logInfo("&aGame worlds created: " + currentPrefix);
+        return new RunnerWorldBundle(runnerIndex, overworld, nether, end, seed, netherSeed);
     }
 
     /**
@@ -70,21 +146,20 @@ public class WorldManager {
         currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
         currentSeed = seed;
 
-        String owName = currentPrefix + "_overworld";
-        String nName = currentPrefix + "_nether";
-        String eName = currentPrefix + "_the_end";
+        String r = "_r0";
+        String owName = currentPrefix + r + "_overworld";
+        String nName = currentPrefix + r + "_nether";
+        String eName = currentPrefix + r + "_the_end";
 
-        // Copy template files into world container
         WorldTemplateManager.createFromTemplate(seed, owName, nName, eName);
 
-        // Load the worlds from copied template files
-        overworld = new WorldCreator(owName)
+        World overworld = new WorldCreator(owName)
                 .seed(seed).environment(World.Environment.NORMAL)
                 .type(WorldType.NORMAL).createWorld();
-        nether = new WorldCreator(nName)
+        World nether = new WorldCreator(nName)
                 .seed(seed).environment(World.Environment.NETHER)
                 .type(WorldType.NORMAL).createWorld();
-        end = new WorldCreator(eName)
+        World end = new WorldCreator(eName)
                 .seed(seed).environment(World.Environment.THE_END)
                 .type(WorldType.NORMAL).createWorld();
 
@@ -92,10 +167,13 @@ public class WorldManager {
         configureGameWorld(nether);
         configureGameWorld(end);
 
-        // Apply structure spacing for any new chunks generated during gameplay
         if (overworld != null) WorldGenModifier.modifyStructureSpacing(overworld);
         if (nether != null) WorldGenModifier.modifyStructureSpacing(nether);
         if (end != null) WorldGenModifier.modifyStructureSpacing(end);
+
+        bundles = new RunnerWorldBundle[]{
+                new RunnerWorldBundle(0, overworld, nether, end, seed, seed)
+        };
 
         plugin.logInfo("&aGame worlds loaded from template: " + currentPrefix + " (seed: " + seed + ")");
     }
@@ -120,29 +198,23 @@ public class WorldManager {
     public static void deleteGameWorlds() {
         evacuatePlayersFromGameWorlds();
 
-        if (overworld != null) {
-            String name = overworld.getName();
-            Bukkit.unloadWorld(overworld, false);
-            overworld = null;
-            deleteWorldFolderAsync(name);
+        if (bundles != null) {
+            for (RunnerWorldBundle b : bundles) {
+                unloadAndDelete(b.getOverworld());
+                unloadAndDelete(b.getNether());
+                unloadAndDelete(b.getEnd());
+            }
         }
-
-        if (nether != null) {
-            String name = nether.getName();
-            Bukkit.unloadWorld(nether, false);
-            nether = null;
-            deleteWorldFolderAsync(name);
-        }
-
-        if (end != null) {
-            String name = end.getName();
-            Bukkit.unloadWorld(end, false);
-            end = null;
-            deleteWorldFolderAsync(name);
-        }
-
+        bundles = EMPTY_BUNDLES;
         currentPrefix = null;
         currentSeed = 0;
+    }
+
+    private static void unloadAndDelete(World world) {
+        if (world == null) return;
+        String name = world.getName();
+        Bukkit.unloadWorld(world, false);
+        deleteWorldFolderAsync(name);
     }
 
     private static void evacuatePlayersFromGameWorlds() {
@@ -155,8 +227,7 @@ public class WorldManager {
     }
 
     public static boolean isGameWorld(World world) {
-        if (world == null) return false;
-        return world.equals(overworld) || world.equals(nether) || world.equals(end);
+        return findBundleContaining(world) != null;
     }
 
     public static void deleteWorldFolder(String worldName) {

@@ -3,6 +3,7 @@ package host.plas.furyspeedrunning.data;
 import host.plas.furyspeedrunning.FurySpeedrunning;
 import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 import host.plas.furyspeedrunning.events.HunterListener;
 import host.plas.furyspeedrunning.managers.InventorySyncManager;
 import host.plas.furyspeedrunning.managers.LootModifier;
@@ -10,6 +11,7 @@ import host.plas.furyspeedrunning.config.MainConfig;
 import host.plas.furyspeedrunning.config.SeedPair;
 import host.plas.furyspeedrunning.world.ChunkPreGenerator;
 import host.plas.furyspeedrunning.world.LobbyManager;
+import host.plas.furyspeedrunning.world.RunnerWorldBundle;
 import host.plas.furyspeedrunning.world.WorldManager;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,7 +28,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,16 @@ public class GameManager {
     @Getter
     private static boolean timerExpiredNotified = false;
 
+    @Getter
+    private static PluginGameMode activeMatchMode = PluginGameMode.COOP;
+
+    private static PluginGameMode pendingGameMode = PluginGameMode.COOP;
+
+    /** Imposter, 30m countdown expiry, and /vote apply only in coop matches. */
+    public static boolean isCoopImposterFeaturesEnabled() {
+        return activeMatchMode == PluginGameMode.COOP;
+    }
+
     public static void startGame() {
         if (state == GameState.PLAYING) return;
         if (preGenerator != null && preGenerator.isRunning()) {
@@ -86,7 +97,6 @@ public class GameManager {
             return;
         }
 
-        // Pick a random seed pair by index that hasn't been played yet
         List<SeedPair> allPairs = config.getSeedPairs();
         List<Integer> playedIndices = config.getPlayedSeedIndices();
         List<Integer> availableIndices = new ArrayList<>();
@@ -98,11 +108,64 @@ public class GameManager {
             return;
         }
 
+        if (config.isVersusMode()) {
+            if (participants.size() != 2) {
+                Bukkit.broadcastMessage("\u00A7cVersus mode requires exactly 2 runners (non-spectators). Spectate with the lobby GUI.");
+                return;
+            }
+            if (availableIndices.size() < 2) {
+                Bukkit.broadcastMessage("\u00A7cVersus needs at least 2 unused seed pairs. Add seeds or reset played-seeds in config.");
+                return;
+            }
+            Collections.shuffle(availableIndices, RANDOM);
+            int idx0 = availableIndices.get(0);
+            int idx1 = availableIndices.get(1);
+            SeedPair pair0 = allPairs.get(idx0);
+            SeedPair pair1 = allPairs.get(idx1);
+            config.addPlayedSeedIndex(idx0);
+            config.addPlayedSeedIndex(idx1);
+            pendingGameMode = PluginGameMode.VERSUS;
+            plugin.logInfo("&eVersus seeds: #" + idx0 + " OW=&b" + pair0.getOverworld()
+                    + " &7| #" + idx1 + " OW=&b" + pair1.getOverworld());
+
+            Bukkit.broadcastMessage("\u00A7e\u00A7lPreparing worlds... \u00A77Generating chunks for both runners.");
+
+            WorldManager.createVersusGameWorlds(
+                    pair0.getOverworld(), pair0.getNether(),
+                    pair1.getOverworld(), pair1.getNether());
+
+            if (WorldManager.getOverworldForRunner(0) == null || WorldManager.getOverworldForRunner(1) == null) {
+                plugin.logSevere("Failed to create versus game worlds!");
+                Bukkit.broadcastMessage("\u00A7c\u00A7lFailed to create game worlds!");
+                return;
+            }
+
+            int radiusBlocks = config.getPreGenRadius();
+            int netherRadius = Math.max(radiusBlocks / 8, 256);
+
+            List<ChunkPreGenerator.GenTask> genTasks = new ArrayList<>();
+            for (int r = 0; r < 2; r++) {
+                World ow = WorldManager.getOverworldForRunner(r);
+                World nw = WorldManager.getNetherForRunner(r);
+                if (ow != null) genTasks.add(ChunkPreGenerator.createTask(ow, radiusBlocks));
+                if (nw != null) genTasks.add(ChunkPreGenerator.createTask(nw, netherRadius));
+            }
+
+            preGenerator = new ChunkPreGenerator();
+            preGenerator.generate(genTasks, () -> {
+                preGenerator = null;
+                onWorldReady(participants);
+            });
+            return;
+        }
+
+        // --- Coop: single shared world ---
         int chosenIndex = availableIndices.get(RANDOM.nextInt(availableIndices.size()));
         SeedPair chosen = allPairs.get(chosenIndex);
         long seed = chosen.getOverworld();
         long netherSeed = chosen.getNether();
         config.addPlayedSeedIndex(chosenIndex);
+        pendingGameMode = PluginGameMode.COOP;
         plugin.logInfo("&eUsing seed #" + chosenIndex + ": &b" + seed + " &7| nether seed: &b" + netherSeed);
 
         Bukkit.broadcastMessage("\u00A7e\u00A7lPreparing world... \u00A77Generating chunks.");
@@ -137,31 +200,49 @@ public class GameManager {
      */
     private static void onWorldReady(List<PlayerData> participants) {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        activeMatchMode = pendingGameMode;
+
         World overworld = WorldManager.getOverworld();
         if (overworld == null) return;
 
-        // Assign roles: pure random pick for imposter from participants
-        PlayerData imposterData = participants.get(RANDOM.nextInt(participants.size()));
-        imposterData.setRole(PlayerRole.HUNTER);
-        for (PlayerData p : participants) {
-            if (p != imposterData) p.setRole(PlayerRole.PLAYER);
+        if (activeMatchMode == PluginGameMode.VERSUS) {
+            for (PlayerData p : participants) {
+                p.setVersusRunnerIndex(null);
+                p.setRole(PlayerRole.PLAYER);
+            }
+            List<PlayerData> runners = new ArrayList<>(participants);
+            Collections.shuffle(runners, RANDOM);
+            runners.get(0).setVersusRunnerIndex(0);
+            runners.get(1).setVersusRunnerIndex(1);
+            for (PlayerData d : PlayerManager.getOnlinePlayers()) {
+                if (d.getRole() == PlayerRole.SPECTATOR) {
+                    d.setVersusRunnerIndex(null);
+                }
+            }
+        } else {
+            for (PlayerData p : PlayerManager.getOnlinePlayers()) {
+                p.setVersusRunnerIndex(null);
+            }
+            PlayerData imposterData = participants.get(RANDOM.nextInt(participants.size()));
+            imposterData.setRole(PlayerRole.HUNTER);
+            for (PlayerData p : participants) {
+                if (p != imposterData) p.setRole(PlayerRole.PLAYER);
+            }
         }
 
         state = GameState.PLAYING;
         gameStartTime = System.currentTimeMillis();
         gameCompleted = false;
 
-        // Timer starts paused — admin must /timer to start it
         timerElapsedMs = 0;
         timerRunning = false;
         timerLastResumed = 0;
         startTimerDisplayTask();
 
-        // Reset loot tracker and initialize master inventory (empty at start)
         LootModifier.reset();
         InventorySyncManager.reset();
 
-        Location spawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
+        Location coopSpawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
 
         for (PlayerData data : PlayerManager.getOnlinePlayers()) {
             Player player = data.getPlayer();
@@ -182,22 +263,40 @@ public class GameManager {
                     break;
             }
 
-            player.teleport(spawn);
+            Location dest;
+            if (activeMatchMode == PluginGameMode.VERSUS) {
+                if (data.getRole() == PlayerRole.SPECTATOR) {
+                    dest = WorldManager.getRunnerRespawnLocation(0);
+                } else {
+                    dest = WorldManager.getRunnerRespawnLocation(data.getVersusRunnerIndexOrZero());
+                }
+                if (dest == null) dest = coopSpawn;
+            } else {
+                dest = coopSpawn;
+            }
+            player.teleport(dest);
         }
 
         applySpectatorVisibility();
 
-        // Send role titles and chat messages (1 tick delay so players are teleported)
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             for (PlayerData data : PlayerManager.getOnlinePlayers()) {
                 Player player = data.getPlayer();
                 if (player == null) continue;
-                sendRoleAnnouncement(player, data.getRole());
+                sendRoleAnnouncement(player, data);
             }
         }, 5L);
 
-        plugin.logInfo("&a&lSpeedrun started! Seed: &e" + WorldManager.getCurrentSeed());
-        Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrun started! \u00A77Beat the dragon in 30 minutes. Good luck!");
+        if (activeMatchMode == PluginGameMode.VERSUS) {
+            RunnerWorldBundle b1 = WorldManager.getBundle(1);
+            long s1 = b1 != null ? b1.getOverworldSeed() : 0L;
+            plugin.logInfo("&a&lVersus started! Seeds (r0/r1): &e" + WorldManager.getCurrentSeed()
+                    + " &7/ &e" + s1);
+            Bukkit.broadcastMessage("\u00A7a\u00A7lVersus started! \u00A77First Ender Dragon kill wins. Shared health and inventory.");
+        } else {
+            plugin.logInfo("&a&lSpeedrun started! Seed: &e" + WorldManager.getCurrentSeed());
+            Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrun started! \u00A77Beat the dragon in 30 minutes. Good luck!");
+        }
     }
 
     public static void stopGame() {
@@ -221,6 +320,11 @@ public class GameManager {
         stopTimerTask();
         clearVotes();
         timerExpiredNotified = false;
+
+        activeMatchMode = PluginGameMode.COOP;
+        for (PlayerData data : PlayerManager.getRegisteredPlayers()) {
+            data.setVersusRunnerIndex(null);
+        }
 
         // Teleport all players to lobby
         for (PlayerData data : PlayerManager.getOnlinePlayers()) {
@@ -317,9 +421,15 @@ public class GameManager {
         }
     }
 
-    private static void sendRoleAnnouncement(Player player, PlayerRole role) {
+    private static void sendRoleAnnouncement(Player player, PlayerData data) {
+        PlayerRole role = data.getRole();
         switch (role) {
             case PLAYER:
+                if (activeMatchMode == PluginGameMode.VERSUS && data.getVersusRunnerIndex() != null) {
+                    int lane = data.getVersusRunnerIndex() + 1;
+                    player.sendMessage("\u00A7e\u00A7lVersus: \u00A77You are runner \u00A7f" + lane
+                            + "\u00A77. Different seed than your opponent; shared inventory and health.");
+                }
                 break;
             case HUNTER:
                 player.sendTitle(
@@ -405,17 +515,32 @@ public class GameManager {
 
     private static void startTimerDisplayTask() {
         stopTimerTask();
-        timerTask = Bukkit.getScheduler().runTaskTimer(FurySpeedrunning.getInstance(), () -> {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+
+        if (activeMatchMode == PluginGameMode.VERSUS) {
+            timerTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                if (state != GameState.PLAYING) return;
+                String actionBarText = "\u00A7eElapsed: \u00A7f" + getElapsedTime();
+                for (PlayerData data : PlayerManager.getOnlinePlayers()) {
+                    Player player = data.getPlayer();
+                    if (player != null) {
+                        player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
+                                TextComponent.fromLegacyText(actionBarText));
+                    }
+                }
+            }, 5L, 10L);
+            return;
+        }
+
+        timerTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != GameState.PLAYING) return;
 
-            // Check if timer expired
             if (timerRunning && getRemainingMs() <= 0) {
                 pauseTimer();
                 onTimerExpired();
                 return;
             }
 
-            // Show action bar to all game participants (including spectators)
             String remaining = getRemainingFormatted();
             String status = timerRunning ? "" : " \u00A77(PAUSED)";
             String actionBarText = "\u00A7e" + remaining + status;
@@ -427,7 +552,7 @@ public class GameManager {
                             TextComponent.fromLegacyText(actionBarText));
                 }
             }
-        }, 5L, 10L); // Every 10 ticks (500ms) for smooth display
+        }, 5L, 10L);
     }
 
     private static void stopTimerTask() {

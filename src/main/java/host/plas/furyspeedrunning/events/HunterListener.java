@@ -6,6 +6,7 @@ import host.plas.furyspeedrunning.data.PlayerData;
 import host.plas.furyspeedrunning.data.PlayerManager;
 import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.boss.BarColor;
@@ -33,6 +34,10 @@ public class HunterListener extends AbstractConglomerate {
     private void startTracking() {
         trackingTask = Bukkit.getScheduler().runTaskTimer(FurySpeedrunning.getInstance(), () -> {
             if (GameManager.getState() != GameState.PLAYING) {
+                removeBossBar();
+                return;
+            }
+            if (GameManager.getActiveMatchMode() != PluginGameMode.COOP) {
                 removeBossBar();
                 return;
             }

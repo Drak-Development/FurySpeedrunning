@@ -13,9 +13,19 @@ public class PlayerData {
     private final UUID uuid;
     private PlayerRole role;
 
+    /**
+     * 0 or 1 for {@link host.plas.furyspeedrunning.enums.PluginGameMode#VERSUS} runners; null in coop or spectators.
+     */
+    private Integer versusRunnerIndex;
+
     public PlayerData(UUID uuid) {
         this.uuid = uuid;
         this.role = PlayerRole.PLAYER;
+    }
+
+    /** Coop and unset versus use bundle 0 for respawn routing. */
+    public int getVersusRunnerIndexOrZero() {
+        return versusRunnerIndex != null ? versusRunnerIndex : 0;
     }
 
     public Player getPlayer() {

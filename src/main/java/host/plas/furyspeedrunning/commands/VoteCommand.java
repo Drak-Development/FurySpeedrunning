@@ -5,6 +5,7 @@ import host.plas.furyspeedrunning.data.PlayerData;
 import host.plas.furyspeedrunning.data.PlayerManager;
 import host.plas.furyspeedrunning.enums.GameState;
 import host.plas.furyspeedrunning.enums.PlayerRole;
+import host.plas.furyspeedrunning.enums.PluginGameMode;
 import host.plas.furyspeedrunning.gui.VoteGui;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -30,6 +31,11 @@ public class VoteCommand implements CommandExecutor, TabCompleter {
 
         if (GameManager.getState() != GameState.PLAYING) {
             player.sendMessage("\u00A7cThere is no game in progress!");
+            return true;
+        }
+
+        if (GameManager.getActiveMatchMode() == PluginGameMode.VERSUS) {
+            player.sendMessage("\u00A7cVoting is only used in coop (imposter) mode.");
             return true;
         }
 

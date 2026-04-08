@@ -17,6 +17,7 @@ import java.util.Map;
 public class WorldGenModifier {
 
     // Structure name -> {spacing, separation} (vanilla defaults reduced ~50%)
+    // Keep numeric values in sync with SeedValidator (structure placement math for FSG-style checks).
     private static final Map<String, int[]> TARGET_SPACING = new HashMap<>();
     static {
         // Vanilla -> Modified (tighter for speedrunning)

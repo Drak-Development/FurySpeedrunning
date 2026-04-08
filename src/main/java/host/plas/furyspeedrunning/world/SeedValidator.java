@@ -3,29 +3,33 @@ package host.plas.furyspeedrunning.world;
 import java.util.Random;
 
 /**
- * Validates Minecraft 1.16 seeds against FSG (Filtered Seed Glitchless) criteria.
- * Based on https://github.com/AndyNovo/filteredseed (v0.5).
- *
- * Uses pure math (no world creation needed) to check structure placement.
- * Checks:
- *  - Bastion in pos/pos nether quadrant within 8 chunks of origin
- *  - Fortress in neg/pos or pos/neg nether quadrant close to origin
- *  - Village or shipwreck in pos/pos overworld within 96 blocks
- *  - Ruined portal in pos/pos between 80-144 blocks, above ground
+ * FSG-style (Filtered Seed Glitchless) seed checks using the same structure spacing the server applies
+ * via {@link WorldGenModifier} (keys: village, fortress, bastion_remnant, ruined_portal, shipwreck).
+ * <p>
+ * Criteria follow the spirit of <a href="https://github.com/AndyNovo/filteredseed">AndyNovo/filteredseed</a>
+ * (legacy v0.5 C tool). Minecraft 1.21.x still uses the classic {@code seed + salt + region*mult} region RNG
+ * for these structures; spacing/separation here must match the values applied in
+ * {@link WorldGenModifier} or validation will not reflect in-game generation.
+ * <p>
+ * Checks (overworld region 0,0 and nether regions as noted):
+ * <ul>
+ *   <li>Nether: bastion in +/+ within 8 chunks of origin; fortress in -/+ or +/- near origin</li>
+ *   <li>Ruined portal in +/+ between 80–144 blocks and {@link #isPortalAboveGround} heuristic</li>
+ *   <li>Village in +/+ within 96 blocks (blacksmith still verified after chunk generation if needed)</li>
+ * </ul>
  */
 public class SeedValidator {
 
-    // Minecraft region coordinate multipliers
+    // Minecraft region coordinate multipliers (unchanged across 1.16–1.21 for these structures)
     private static final long REGION_X_MULT = 341873128712L;
     private static final long REGION_Z_MULT = 132897987541L;
 
-    // Nether structure config (bastion + fortress share salt; type decided by RNG roll)
-    // Values match WorldGenModifier reduced spacing for speedrunning
+    // Nether: same spacing/separation as WorldGenModifier "fortress" / "bastion_remnant" entries
     private static final int NETHER_SPACING = 15;
     private static final int NETHER_SEPARATION = 3;
     private static final long NETHER_SALT = 30084232L;
 
-    // Overworld structure configs (reduced to match WorldGenModifier)
+    // Overworld: match WorldGenModifier "village", "ruined_portal", "shipwreck" entries
     private static final int VILLAGE_SPACING = 16;
     private static final int VILLAGE_SEPARATION = 4;
     private static final long VILLAGE_SALT = 10387312L;
