@@ -1,9 +1,9 @@
 package host.plas.furyspeedrunning.commands;
 
 import host.plas.furyspeedrunning.FurySpeedrunning;
+import host.plas.furyspeedrunning.config.SeedPair;
 import host.plas.furyspeedrunning.data.GameManager;
 import host.plas.furyspeedrunning.enums.GameState;
-import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -24,7 +24,7 @@ public class ManageGameCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 1) {
-            sender.sendMessage("\u00A7cUsage: /managegame <start|stop|status|regentemplate>");
+            sender.sendMessage("\u00A7cUsage: /managegame <start|stop|status>");
             return true;
         }
 
@@ -53,21 +53,8 @@ public class ManageGameCommand implements CommandExecutor, TabCompleter {
                 sendStatus(sender);
                 break;
 
-            case "regentemplate":
-                if (WorldTemplateManager.isGenerating()) {
-                    sender.sendMessage("\u00A7cTemplate generation is already running: " + WorldTemplateManager.getGenerationStatus());
-                    return true;
-                }
-                sender.sendMessage("\u00A7eRestarting template generation for all seeds...");
-                // Delete existing templates and regenerate
-                deleteAllTemplates();
-                WorldTemplateManager.generateMissingTemplates(() -> {
-                    sender.sendMessage("\u00A7aAll templates regenerated!");
-                });
-                break;
-
             default:
-                sender.sendMessage("\u00A7cUsage: /managegame <start|stop|status|regentemplate>");
+                sender.sendMessage("\u00A7cUsage: /managegame <start|stop|status>");
                 break;
         }
 
@@ -83,41 +70,16 @@ public class ManageGameCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("\u00A77Completed: \u00A7e" + (GameManager.isGameCompleted() ? "Yes" : "No"));
         }
 
-        if (WorldTemplateManager.isGenerating()) {
-            sender.sendMessage("\u00A77Template gen: \u00A7e" + WorldTemplateManager.getGenerationStatus());
-        } else {
-            List<Long> seeds = FurySpeedrunning.getMainConfig().getSeeds();
-            int ready = 0;
-            for (long seed : seeds) {
-                if (WorldTemplateManager.hasTemplate(seed)) ready++;
-            }
-            sender.sendMessage("\u00A77Templates: \u00A7e" + ready + "/" + seeds.size() + " ready");
-        }
-    }
-
-    private void deleteAllTemplates() {
-        java.io.File templatesDir = new java.io.File(FurySpeedrunning.getInstance().getDataFolder(), "templates");
-        if (templatesDir.exists()) {
-            deleteRecursive(templatesDir);
-        }
-    }
-
-    private void deleteRecursive(java.io.File file) {
-        if (file.isDirectory()) {
-            java.io.File[] children = file.listFiles();
-            if (children != null) {
-                for (java.io.File child : children) {
-                    deleteRecursive(child);
-                }
-            }
-        }
-        file.delete();
+        List<SeedPair> allPairs = FurySpeedrunning.getMainConfig().getSeedPairs();
+        List<Integer> playedIndices = FurySpeedrunning.getMainConfig().getPlayedSeedIndices();
+        int remaining = allPairs.size() - playedIndices.size();
+        sender.sendMessage("\u00A77Seeds remaining: \u00A7e" + remaining + "/" + allPairs.size());
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("start", "stop", "status", "regentemplate").stream()
+            return Arrays.asList("start", "stop", "status").stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());
         }

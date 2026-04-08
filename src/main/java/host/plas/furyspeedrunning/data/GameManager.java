@@ -6,9 +6,11 @@ import host.plas.furyspeedrunning.enums.PlayerRole;
 import host.plas.furyspeedrunning.events.HunterListener;
 import host.plas.furyspeedrunning.managers.InventorySyncManager;
 import host.plas.furyspeedrunning.managers.LootModifier;
+import host.plas.furyspeedrunning.config.MainConfig;
+import host.plas.furyspeedrunning.config.SeedPair;
+import host.plas.furyspeedrunning.world.ChunkPreGenerator;
 import host.plas.furyspeedrunning.world.LobbyManager;
 import host.plas.furyspeedrunning.world.WorldManager;
-import host.plas.furyspeedrunning.world.WorldTemplateManager;
 import lombok.Getter;
 import lombok.Setter;
 import net.md_5.bungee.api.ChatMessageType;
@@ -17,13 +19,20 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.advancement.Advancement;
+import org.bukkit.advancement.AdvancementProgress;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class GameManager {
     @Getter @Setter
@@ -37,6 +46,9 @@ public class GameManager {
 
     private static final Random RANDOM = new Random();
 
+    @Getter
+    private static ChunkPreGenerator preGenerator;
+
     // Timer system
     private static final long TIMER_DURATION_MS = 30 * 60 * 1000; // 30 minutes
     @Getter
@@ -46,14 +58,20 @@ public class GameManager {
     private static long timerLastResumed = 0;
     private static BukkitTask timerTask;
 
+    // Vote system
+    private static final Map<UUID, UUID> votes = new ConcurrentHashMap<>();
+    @Getter
+    private static boolean timerExpiredNotified = false;
+
     public static void startGame() {
         if (state == GameState.PLAYING) return;
-        if (WorldTemplateManager.isGenerating()) {
-            Bukkit.broadcastMessage("\u00A7cTemplates are still being generated. Please wait.");
+        if (preGenerator != null && preGenerator.isRunning()) {
+            Bukkit.broadcastMessage("\u00A7cWorld is still generating. Please wait.");
             return;
         }
 
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        MainConfig config = plugin.getMainConfig();
 
         // Collect non-spectator players for role assignment
         List<PlayerData> participants = new ArrayList<>();
@@ -68,28 +86,65 @@ public class GameManager {
             return;
         }
 
-        // Pick seeds and create worlds
-        List<Long> seeds = plugin.getMainConfig().getSeeds();
-        long seed = seeds.get(RANDOM.nextInt(seeds.size()));
+        // Pick a random seed pair by index that hasn't been played yet
+        List<SeedPair> allPairs = config.getSeedPairs();
+        List<Integer> playedIndices = config.getPlayedSeedIndices();
+        List<Integer> availableIndices = new ArrayList<>();
+        for (int i = 0; i < allPairs.size(); i++) {
+            if (!playedIndices.contains(i)) availableIndices.add(i);
+        }
+        if (availableIndices.isEmpty()) {
+            Bukkit.broadcastMessage("\u00A7cAll seeds have been played! Ask an admin to add more or clear played-seeds.");
+            return;
+        }
 
-        plugin.logInfo("&aStarting speedrun with seed: &e" + seed);
-        Bukkit.broadcastMessage("\u00A7e\u00A7lPreparing world... \u00A77Please wait.");
+        int chosenIndex = availableIndices.get(RANDOM.nextInt(availableIndices.size()));
+        SeedPair chosen = allPairs.get(chosenIndex);
+        long seed = chosen.getOverworld();
+        long netherSeed = chosen.getNether();
+        config.addPlayedSeedIndex(chosenIndex);
+        plugin.logInfo("&eUsing seed #" + chosenIndex + ": &b" + seed + " &7| nether seed: &b" + netherSeed);
 
-        boolean hadTemplate = WorldTemplateManager.hasTemplate(seed);
-        WorldManager.createGameWorlds(seed);
+        Bukkit.broadcastMessage("\u00A7e\u00A7lPreparing world... \u00A77Generating chunks.");
+
+        WorldManager.createGameWorlds(seed, netherSeed);
         World overworld = WorldManager.getOverworld();
+        World nether = WorldManager.getNether();
         if (overworld == null) {
             plugin.logSevere("Failed to create game worlds!");
             Bukkit.broadcastMessage("\u00A7c\u00A7lFailed to create game worlds!");
             return;
         }
 
-        // Assign roles: randomly pick 1 imposter from participants, rest are speedrunners
-        Collections.shuffle(participants);
-        PlayerData imposterData = participants.get(0);
+        int radiusBlocks = config.getPreGenRadius();
+        int netherRadius = Math.max(radiusBlocks / 8, 256);
+
+        List<ChunkPreGenerator.GenTask> genTasks = new ArrayList<>();
+        genTasks.add(ChunkPreGenerator.createTask(overworld, radiusBlocks));
+        if (nether != null) {
+            genTasks.add(ChunkPreGenerator.createTask(nether, netherRadius));
+        }
+
+        preGenerator = new ChunkPreGenerator();
+        preGenerator.generate(genTasks, () -> {
+            preGenerator = null;
+            onWorldReady(participants);
+        });
+    }
+
+    /**
+     * Called when chunk pre-generation is complete. Sets up roles, teleports players, starts game.
+     */
+    private static void onWorldReady(List<PlayerData> participants) {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        World overworld = WorldManager.getOverworld();
+        if (overworld == null) return;
+
+        // Assign roles: pure random pick for imposter from participants
+        PlayerData imposterData = participants.get(RANDOM.nextInt(participants.size()));
         imposterData.setRole(PlayerRole.HUNTER);
-        for (int i = 1; i < participants.size(); i++) {
-            participants.get(i).setRole(PlayerRole.PLAYER);
+        for (PlayerData p : participants) {
+            if (p != imposterData) p.setRole(PlayerRole.PLAYER);
         }
 
         state = GameState.PLAYING;
@@ -102,8 +157,9 @@ public class GameManager {
         timerLastResumed = 0;
         startTimerDisplayTask();
 
-        // Reset loot tracker
+        // Reset loot tracker and initialize master inventory (empty at start)
         LootModifier.reset();
+        InventorySyncManager.reset();
 
         Location spawn = overworld.getSpawnLocation().add(0.5, 1, 0.5);
 
@@ -140,7 +196,7 @@ public class GameManager {
             }
         }, 5L);
 
-        plugin.logInfo("&a&lSpeedrun started! Seed: &e" + seed);
+        plugin.logInfo("&a&lSpeedrun started! Seed: &e" + WorldManager.getCurrentSeed());
         Bukkit.broadcastMessage("\u00A7a\u00A7lSpeedrun started! \u00A77Beat the dragon in 30 minutes. Good luck!");
     }
 
@@ -152,11 +208,19 @@ public class GameManager {
         gameStartTime = 0;
         gameCompleted = false;
 
-        // Reset syncing state, loot tracking, boss bar, and timer
+        // Cancel any in-progress chunk generation
+        if (preGenerator != null && preGenerator.isRunning()) {
+            preGenerator.cancel();
+            preGenerator = null;
+        }
+
+        // Reset syncing state, loot tracking, boss bar, timer, and votes
         InventorySyncManager.reset();
         LootModifier.reset();
         HunterListener.removeBossBar();
         stopTimerTask();
+        clearVotes();
+        timerExpiredNotified = false;
 
         // Teleport all players to lobby
         for (PlayerData data : PlayerManager.getOnlinePlayers()) {
@@ -174,6 +238,9 @@ public class GameManager {
             player.setExp(0);
             player.setLevel(0);
             player.getActivePotionEffects().forEach(e -> player.removePotionEffect(e.getType()));
+
+            // Reset all advancements
+            resetAdvancements(player);
 
             LobbyManager.sendToLobby(player);
             LobbyManager.giveLobbyItems(player);
@@ -213,6 +280,17 @@ public class GameManager {
 
         // Give spectator items
         LobbyManager.giveSpectatorItems(player);
+    }
+
+    private static void resetAdvancements(Player player) {
+        Iterator<Advancement> it = Bukkit.advancementIterator();
+        while (it.hasNext()) {
+            Advancement advancement = it.next();
+            AdvancementProgress progress = player.getAdvancementProgress(advancement);
+            for (String criteria : progress.getAwardedCriteria()) {
+                progress.revokeCriteria(criteria);
+            }
+        }
     }
 
     public static void applySpectatorVisibility() {
@@ -337,13 +415,12 @@ public class GameManager {
                 return;
             }
 
-            // Show action bar to all game participants
+            // Show action bar to all game participants (including spectators)
             String remaining = getRemainingFormatted();
             String status = timerRunning ? "" : " \u00A77(PAUSED)";
             String actionBarText = "\u00A7e" + remaining + status;
 
             for (PlayerData data : PlayerManager.getOnlinePlayers()) {
-                if (data.getRole() == PlayerRole.SPECTATOR) continue;
                 Player player = data.getPlayer();
                 if (player != null) {
                     player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
@@ -363,25 +440,55 @@ public class GameManager {
     }
 
     private static void onTimerExpired() {
+        timerExpiredNotified = true;
+
         Bukkit.broadcastMessage("");
         Bukkit.broadcastMessage("\u00A7c\u00A7l\u23F0 TIME'S UP! \u00A7r\u00A7c30 minutes have passed!");
-        Bukkit.broadcastMessage("\u00A7c\u00A7lThe Imposter wins!");
+        Bukkit.broadcastMessage("\u00A76\u00A7lAll players must now vote for the Imposter! \u00A77Use \u00A7e/vote");
         Bukkit.broadcastMessage("");
 
-        // Send titles
+        // Send titles prompting vote
         for (PlayerData data : PlayerManager.getOnlinePlayers()) {
             Player player = data.getPlayer();
             if (player == null) continue;
-            if (data.getRole() == PlayerRole.HUNTER) {
-                player.sendTitle("\u00A7a\u00A7lVICTORY!", "\u00A77You sabotaged the speedrun!", 10, 60, 20);
-            } else if (data.getRole() == PlayerRole.PLAYER) {
-                player.sendTitle("\u00A7c\u00A7lDEFEAT!", "\u00A77Time ran out!", 10, 60, 20);
+            if (data.getRole() == PlayerRole.PLAYER || data.getRole() == PlayerRole.HUNTER) {
+                player.sendTitle("\u00A7c\u00A7lTIME'S UP!", "\u00A77Vote for the Imposter with /vote", 10, 60, 20);
+            } else if (data.getRole() == PlayerRole.SPECTATOR) {
+                player.sendTitle("\u00A7c\u00A7lTIME'S UP!", "\u00A77Players are voting...", 10, 60, 20);
             }
         }
 
-        // Auto-stop after delay
+        // Open vote GUI for all non-imposter active players who haven't voted
         Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> {
-            GameManager.stopGame();
-        }, 20L * FurySpeedrunning.getInstance().getMainConfig().getPostWinDelay());
+            for (Player p : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.PLAYER)) {
+                if (!votes.containsKey(p.getUniqueId())) {
+                    new host.plas.furyspeedrunning.gui.VoteGui(p).open();
+                }
+            }
+            // Also open for hunter (they vote too, to avoid revealing themselves)
+            for (Player p : PlayerManager.getOnlineBukkitPlayersByRole(PlayerRole.HUNTER)) {
+                if (!votes.containsKey(p.getUniqueId())) {
+                    new host.plas.furyspeedrunning.gui.VoteGui(p).open();
+                }
+            }
+        }, 40L); // 2 second delay after title
+    }
+
+    // --- Vote system ---
+
+    public static Map<UUID, UUID> getVotes() {
+        return Collections.unmodifiableMap(votes);
+    }
+
+    public static UUID getVote(UUID voter) {
+        return votes.get(voter);
+    }
+
+    public static void setVote(UUID voter, UUID target) {
+        votes.put(voter, target);
+    }
+
+    public static void clearVotes() {
+        votes.clear();
     }
 }

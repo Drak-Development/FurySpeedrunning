@@ -16,19 +16,19 @@ import java.util.Map;
  */
 public class WorldGenModifier {
 
-    // Structure name -> {spacing, separation} (vanilla defaults reduced by ~35%)
+    // Structure name -> {spacing, separation} (vanilla defaults reduced ~50%)
     private static final Map<String, int[]> TARGET_SPACING = new HashMap<>();
     static {
-        // Vanilla -> Modified
-        TARGET_SPACING.put("village",          new int[]{20, 6});   // was 32, 8
-        TARGET_SPACING.put("fortress",         new int[]{18, 4});   // was 27, 4
-        TARGET_SPACING.put("bastion_remnant",  new int[]{18, 4});   // was 27, 4
-        TARGET_SPACING.put("ruined_portal",    new int[]{25, 8});   // was 40, 15
-        TARGET_SPACING.put("desert_pyramid",   new int[]{20, 6});   // was 32, 8
-        TARGET_SPACING.put("jungle_pyramid",   new int[]{20, 6});   // was 32, 8
-        TARGET_SPACING.put("shipwreck",        new int[]{16, 6});   // was 24, 4
+        // Vanilla -> Modified (tighter for speedrunning)
+        TARGET_SPACING.put("village",          new int[]{16, 4});   // was 32, 8
+        TARGET_SPACING.put("fortress",         new int[]{15, 3});   // was 27, 4
+        TARGET_SPACING.put("bastion_remnant",  new int[]{15, 3});   // was 27, 4
+        TARGET_SPACING.put("ruined_portal",    new int[]{20, 6});   // was 40, 15
+        TARGET_SPACING.put("desert_pyramid",   new int[]{16, 4});   // was 32, 8
+        TARGET_SPACING.put("jungle_pyramid",   new int[]{16, 4});   // was 32, 8
+        TARGET_SPACING.put("shipwreck",        new int[]{14, 4});   // was 24, 4
         TARGET_SPACING.put("buried_treasure",  new int[]{1, 0});    // was 1, 0 (keep same)
-        TARGET_SPACING.put("endcity",          new int[]{14, 8});   // was 20, 11
+        TARGET_SPACING.put("endcity",          new int[]{12, 6});   // was 20, 11
     }
 
     /**
@@ -124,6 +124,25 @@ public class WorldGenModifier {
         return null;
     }
 
+    /**
+     * Returns true if the class is a primitive JDK type that should never be traversed.
+     * Allows Supplier, Map, and other container types through.
+     */
+    private static boolean shouldSkipField(Class<?> fieldType, Object value) {
+        if (fieldType == null) return true;
+        // Always allow: Supplier (wraps NMS settings), Map (structure map), and NMS types
+        if (java.util.function.Supplier.class.isAssignableFrom(fieldType)) return false;
+        if (Map.class.isAssignableFrom(fieldType)) return false;
+        // Skip primitive wrappers and common JDK value types that can't contain NMS data
+        if (fieldType == int.class || fieldType == long.class || fieldType == boolean.class
+                || fieldType == float.class || fieldType == double.class
+                || fieldType == byte.class || fieldType == short.class || fieldType == char.class) return true;
+        if (fieldType == Integer.class || fieldType == Long.class || fieldType == Boolean.class
+                || fieldType == Float.class || fieldType == Double.class
+                || fieldType == String.class || fieldType == Class.class) return true;
+        return false;
+    }
+
     @SuppressWarnings("unchecked")
     private static Object findStructureSettings(Object chunkGenerator) {
         // Walk the generator's fields looking for structure settings
@@ -133,6 +152,7 @@ public class WorldGenModifier {
         Class<?> clazz = chunkGenerator.getClass();
         while (clazz != null && clazz != Object.class) {
             for (Field f : clazz.getDeclaredFields()) {
+                if (shouldSkipField(f.getType(), null)) continue;
                 f.setAccessible(true);
                 try {
                     Object val = f.get(chunkGenerator);
@@ -153,9 +173,12 @@ public class WorldGenModifier {
                         return val;
                     }
 
-                    // Check nested objects for structure settings
-                    Object nested = findFieldWithMapOfStructures(val);
-                    if (nested != null) return nested;
+                    // Check nested NMS objects for structure settings
+                    String valClassName = val.getClass().getName();
+                    if (!valClassName.startsWith("java.") && !valClassName.startsWith("javax.")) {
+                        Object nested = findFieldWithMapOfStructures(val);
+                        if (nested != null) return nested;
+                    }
 
                 } catch (Exception e) {
                     // Skip inaccessible fields
@@ -168,6 +191,8 @@ public class WorldGenModifier {
 
     private static Object findFieldWithMapOfStructures(Object obj) {
         if (obj == null) return null;
+        String objClassName = obj.getClass().getName();
+        if (objClassName.startsWith("java.") && !Map.class.isAssignableFrom(obj.getClass())) return null;
         for (Field f : obj.getClass().getDeclaredFields()) {
             f.setAccessible(true);
             try {

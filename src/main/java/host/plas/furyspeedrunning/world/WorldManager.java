@@ -28,9 +28,9 @@ public class WorldManager {
     private static long currentSeed;
 
     /**
-     * Creates game worlds — uses pre-generated templates if available, otherwise generates fresh.
+     * Creates game worlds fresh with the given seed.
      */
-    public static void createGameWorlds(long seed) {
+    public static void createGameWorlds(long seed, long netherSeed) {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
         currentSeed = seed;
@@ -39,9 +39,45 @@ public class WorldManager {
         String nName = currentPrefix + "_nether";
         String eName = currentPrefix + "_the_end";
 
-        boolean usedTemplate = WorldTemplateManager.createFromTemplate(seed, owName, nName, eName);
+        overworld = new WorldCreator(owName)
+                .seed(seed).environment(World.Environment.NORMAL)
+                .type(WorldType.NORMAL).createWorld();
+        nether = new WorldCreator(nName)
+                .seed(netherSeed).environment(World.Environment.NETHER)
+                .type(WorldType.NORMAL).createWorld();
+        end = new WorldCreator(eName)
+                .seed(seed).environment(World.Environment.THE_END)
+                .type(WorldType.NORMAL).createWorld();
 
-        // Load worlds (from template copy or fresh generation)
+        configureGameWorld(overworld);
+        configureGameWorld(nether);
+        configureGameWorld(end);
+
+        // Modify structure spacing for closer structures
+        if (overworld != null) WorldGenModifier.modifyStructureSpacing(overworld);
+        if (nether != null) WorldGenModifier.modifyStructureSpacing(nether);
+        if (end != null) WorldGenModifier.modifyStructureSpacing(end);
+
+        plugin.logInfo("&aGame worlds created: " + currentPrefix);
+    }
+
+    /**
+     * Creates game worlds from a pre-generated template. Chunks are already generated,
+     * so no pre-generation step is needed.
+     */
+    public static void createGameWorldsFromTemplate(long seed) {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        currentPrefix = plugin.getMainConfig().getWorldPrefix() + "_" + System.currentTimeMillis();
+        currentSeed = seed;
+
+        String owName = currentPrefix + "_overworld";
+        String nName = currentPrefix + "_nether";
+        String eName = currentPrefix + "_the_end";
+
+        // Copy template files into world container
+        WorldTemplateManager.createFromTemplate(seed, owName, nName, eName);
+
+        // Load the worlds from copied template files
         overworld = new WorldCreator(owName)
                 .seed(seed).environment(World.Environment.NORMAL)
                 .type(WorldType.NORMAL).createWorld();
@@ -52,22 +88,16 @@ public class WorldManager {
                 .seed(seed).environment(World.Environment.THE_END)
                 .type(WorldType.NORMAL).createWorld();
 
-        if (usedTemplate) {
-            plugin.logInfo("&aGame worlds loaded from template for seed &b" + seed);
-        } else {
-            plugin.logInfo("&eNo template for seed " + seed + " \u2014 generated fresh.");
-        }
-
         configureGameWorld(overworld);
         configureGameWorld(nether);
         configureGameWorld(end);
 
-        // Modify structure spacing for MCSR-style closer structures
+        // Apply structure spacing for any new chunks generated during gameplay
         if (overworld != null) WorldGenModifier.modifyStructureSpacing(overworld);
         if (nether != null) WorldGenModifier.modifyStructureSpacing(nether);
         if (end != null) WorldGenModifier.modifyStructureSpacing(end);
 
-        plugin.logInfo("&aGame worlds ready: " + currentPrefix);
+        plugin.logInfo("&aGame worlds loaded from template: " + currentPrefix + " (seed: " + seed + ")");
     }
 
     private static void configureGameWorld(World world) {

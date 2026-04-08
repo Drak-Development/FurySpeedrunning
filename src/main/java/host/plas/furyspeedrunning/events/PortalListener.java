@@ -28,18 +28,34 @@ public class PortalListener extends AbstractConglomerate {
         if (to == null) return;
 
         if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) {
-            // Overworld -> Nether or Nether -> Overworld
+            Location fromLoc = event.getFrom();
             if (from.equals(WorldManager.getOverworld()) && WorldManager.getNether() != null) {
-                to.setWorld(WorldManager.getNether());
-                event.setTo(to);
+                // Overworld -> Nether: divide coords by 8
+                Location netherDest = new Location(
+                        WorldManager.getNether(),
+                        fromLoc.getX() / 8.0,
+                        fromLoc.getY(),
+                        fromLoc.getZ() / 8.0,
+                        fromLoc.getYaw(),
+                        fromLoc.getPitch()
+                );
+                event.setTo(netherDest);
             } else if (from.equals(WorldManager.getNether()) && WorldManager.getOverworld() != null) {
-                to.setWorld(WorldManager.getOverworld());
-                event.setTo(to);
+                // Nether -> Overworld: multiply coords by 8
+                Location overworldDest = new Location(
+                        WorldManager.getOverworld(),
+                        fromLoc.getX() * 8.0,
+                        fromLoc.getY(),
+                        fromLoc.getZ() * 8.0,
+                        fromLoc.getYaw(),
+                        fromLoc.getPitch()
+                );
+                event.setTo(overworldDest);
             }
         } else if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL) {
             if (from.equals(WorldManager.getOverworld()) && WorldManager.getEnd() != null) {
-                // Overworld -> End
-                Location endSpawn = WorldManager.getEnd().getSpawnLocation();
+                // Overworld -> End: spawn on the obsidian platform
+                Location endSpawn = new Location(WorldManager.getEnd(), 100.5, 49, 0.5);
                 event.setTo(endSpawn);
             } else if (from.equals(WorldManager.getEnd())) {
                 // End -> Overworld (return portal after dragon kill)

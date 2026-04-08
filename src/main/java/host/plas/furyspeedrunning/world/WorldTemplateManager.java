@@ -2,9 +2,12 @@ package host.plas.furyspeedrunning.world;
 
 import host.plas.furyspeedrunning.FurySpeedrunning;
 import host.plas.furyspeedrunning.config.MainConfig;
+import host.plas.furyspeedrunning.data.GameManager;
 import lombok.Getter;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
@@ -16,7 +19,6 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.List;
 
 public class WorldTemplateManager {
     private static final String TEMPLATE_DIR_NAME = "templates";
@@ -29,6 +31,9 @@ public class WorldTemplateManager {
 
     // Tracks current Chunky pre-gen polling task
     private static int chunkyPollTaskId = -1;
+
+    // Queue of seeds with ready templates
+    private static final Deque<Long> readyQueue = new ArrayDeque<>();
 
     private static File getTemplatesDir() {
         File dir = new File(FurySpeedrunning.getInstance().getDataFolder(), TEMPLATE_DIR_NAME);
@@ -52,63 +57,134 @@ public class WorldTemplateManager {
                 && Bukkit.getPluginManager().isPluginEnabled("Chunky");
     }
 
+    // --- World Queue System ---
+
+    public static int getQueueSize() {
+        return readyQueue.size();
+    }
+
     /**
-     * Generates templates for all seeds that don't already have one.
-     * Uses Chunky for chunk pre-generation.
+     * Starts the world queue system. Loads existing templates and begins
+     * generating new ones until the queue target is reached.
      */
-    public static void generateMissingTemplates(Runnable onAllComplete) {
+    public static void startWorldQueue() {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
 
-        if (!isChunkyAvailable()) {
-            plugin.logWarning("&cChunky plugin not found! Templates will not be pre-generated.");
-            plugin.logWarning("&cInstall Chunky for pre-generation: https://modrinth.com/plugin/chunky");
-            if (onAllComplete != null) onAllComplete.run();
-            return;
-        }
+        // Clean up any interrupted template generations from previous runs
+        cleanupInterruptedGenerations();
 
-        List<Long> seeds = plugin.getMainConfig().getSeeds();
-
-        Deque<Long> toGenerate = new ArrayDeque<>();
-        for (long seed : seeds) {
-            if (!hasTemplate(seed)) {
-                toGenerate.add(seed);
-            } else {
-                plugin.logInfo("&aTemplate for seed &e" + seed + " &aalready exists.");
+        // Load existing templates into queue
+        File templatesDir = getTemplatesDir();
+        File[] seedDirs = templatesDir.listFiles(File::isDirectory);
+        if (seedDirs != null) {
+            for (File dir : seedDirs) {
+                try {
+                    long seed = Long.parseLong(dir.getName());
+                    if (hasTemplate(seed)) {
+                        readyQueue.add(seed);
+                    }
+                } catch (NumberFormatException ignored) {}
             }
         }
 
-        if (toGenerate.isEmpty()) {
-            plugin.logInfo("&aAll seed templates are ready.");
-            if (onAllComplete != null) onAllComplete.run();
-            return;
-        }
+        int target = 5;
+        plugin.logInfo("&a" + readyQueue.size() + "/" + target + " world templates loaded into queue.");
+
+        fillQueue();
+    }
+
+    /**
+     * Fills the queue to the target size by finding FSG seeds and generating templates.
+     * Generates one template at a time.
+     */
+    private static void fillQueue() {
+        FurySpeedrunning plugin = FurySpeedrunning.getInstance();
+        int target = 5;
+        if (readyQueue.size() >= target || generating) return;
 
         generating = true;
-        plugin.logInfo("&e" + toGenerate.size() + " seed template(s) need generation via Chunky...");
-        Bukkit.broadcastMessage("\u00A7e\u00A7lPre-generating world templates via Chunky...");
+        generationStatus = "Finding FSG seed...";
 
-        generateNextSeed(toGenerate, onAllComplete);
+        // Find a valid FSG seed off the main thread
+        java.util.Set<Long> played = java.util.Collections.emptySet();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            long seed;
+            // Keep searching until we find a seed that hasn't been played
+            do {
+                seed = SeedValidator.findFilteredSeed();
+            } while (played.contains(seed));
+
+            long finalSeed = seed;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (hasTemplate(finalSeed) || readyQueue.contains(finalSeed)) {
+                    // Already have this seed — add to queue if not already there
+                    if (!readyQueue.contains(finalSeed) && hasTemplate(finalSeed)) {
+                        readyQueue.add(finalSeed);
+                    }
+                    generating = false;
+                    generationStatus = "";
+                    fillQueue();
+                } else {
+                    plugin.logInfo("&eFSG seed found: &b" + finalSeed + " &e— generating template...");
+                    generateTemplate(finalSeed, () -> {
+                        readyQueue.add(finalSeed);
+                        generating = false;
+                        generationStatus = "";
+                        int current = readyQueue.size();
+                        plugin.logInfo("&aWorld template queued for seed &e" + finalSeed + " &a(" + current + "/" + target + ")");
+                        fillQueue();
+                    });
+                }
+            });
+        });
     }
 
-    private static void generateNextSeed(Deque<Long> remaining, Runnable onAllComplete) {
-        if (remaining.isEmpty()) {
-            generating = false;
-            generationStatus = "";
-            FurySpeedrunning.getInstance().logInfo("&a&lAll seed templates generated!");
-            Bukkit.broadcastMessage("\u00A7a\u00A7lAll world templates are ready!");
-            if (onAllComplete != null) onAllComplete.run();
-            return;
+    /**
+     * Takes the next ready seed from the queue for use in a game, skipping already-played seeds.
+     * Deletes the used template and triggers generation of a replacement.
+     */
+    public static Long pollReadySeed(java.util.Set<Long> playedSeeds) {
+        Long seed = null;
+        while (!readyQueue.isEmpty()) {
+            Long candidate = readyQueue.poll();
+            if (candidate != null && !playedSeeds.contains(candidate)) {
+                seed = candidate;
+                break;
+            }
+            // This seed was already played — delete its template
+            if (candidate != null) {
+                deleteTemplateAsync(candidate);
+            }
         }
-
-        long seed = remaining.poll();
-        generateTemplate(seed, () -> generateNextSeed(remaining, onAllComplete));
+        if (seed != null) {
+            // Delete the template we're about to use so it won't be re-queued
+            deleteTemplateAsync(seed);
+        }
+        // Start generating a replacement after a short delay
+        Bukkit.getScheduler().runTaskLater(FurySpeedrunning.getInstance(), () -> fillQueue(), 20L);
+        return seed;
     }
+
+    /**
+     * Deletes a template's files asynchronously.
+     */
+    private static void deleteTemplateAsync(long seed) {
+        Bukkit.getScheduler().runTaskAsynchronously(FurySpeedrunning.getInstance(), () -> {
+            File seedDir = getSeedDir(seed);
+            if (seedDir.exists()) {
+                deleteRecursive(seedDir);
+                FurySpeedrunning.getInstance().logInfo("&aDeleted used template for seed: " + seed);
+            }
+        });
+    }
+
+    // --- Template Generation ---
 
     private static void generateTemplate(long seed, Runnable onComplete) {
         FurySpeedrunning plugin = FurySpeedrunning.getInstance();
         String prefix = "template_gen_" + seed;
         MainConfig config = FurySpeedrunning.getMainConfig();
-        int radiusBlocks = config.getTemplatePreGenRadius();
+        int radiusBlocks = config.getPreGenRadius();
 
         plugin.logInfo("&eGenerating template for seed &b" + seed + "&e...");
         generationStatus = "Seed " + seed + " \u2014 creating worlds...";
@@ -135,12 +211,37 @@ public class WorldTemplateManager {
         netherWorld.setDifficulty(Difficulty.NORMAL);
         endWorld.setDifficulty(Difficulty.NORMAL);
 
+        // Apply structure spacing modifications before chunk generation
+        WorldGenModifier.modifyStructureSpacing(overworld);
+        WorldGenModifier.modifyStructureSpacing(netherWorld);
+        WorldGenModifier.modifyStructureSpacing(endWorld);
+
         int netherRadius = Math.max(radiusBlocks / 8, 256);
         int endRadius = Math.max(radiusBlocks / 4, 192);
 
-        // Chain: overworld → nether → end → save → cleanup
+        // Chain: overworld → blacksmith check → nether → end → save → cleanup
         generationStatus = "Seed " + seed + " \u2014 overworld (" + radiusBlocks + " blocks)";
         chunkyPreGen(overworld, radiusBlocks, () -> {
+            // After overworld gen, verify village has a blacksmith
+            if (!hasBlacksmithNearVillage(overworld, seed)) {
+                plugin.logWarning("Seed " + seed + " has no blacksmith in village — discarding.");
+                Bukkit.unloadWorld(overworld, false);
+                Bukkit.unloadWorld(netherWorld, false);
+                Bukkit.unloadWorld(endWorld, false);
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    deleteRecursive(new File(Bukkit.getWorldContainer(), prefix + "_overworld"));
+                    deleteRecursive(new File(Bukkit.getWorldContainer(), prefix + "_nether"));
+                    deleteRecursive(new File(Bukkit.getWorldContainer(), prefix + "_the_end"));
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        generating = false;
+                        generationStatus = "";
+                        fillQueue(); // Retry with a new seed
+                    });
+                });
+                return;
+            }
+            plugin.logInfo("&aBlacksmith confirmed for seed &b" + seed);
+
             generationStatus = "Seed " + seed + " \u2014 nether (" + netherRadius + " blocks)";
             chunkyPreGen(netherWorld, netherRadius, () -> {
                 generationStatus = "Seed " + seed + " \u2014 end (" + endRadius + " blocks)";
@@ -190,6 +291,33 @@ public class WorldTemplateManager {
     }
 
     /**
+     * Scans the area around the expected village position for blacksmith indicator blocks.
+     * Checks for BLAST_FURNACE (weaponsmith) and SMITHING_TABLE (toolsmith) which only
+     * appear in village blacksmith buildings.
+     */
+    private static boolean hasBlacksmithNearVillage(World overworld, long seed) {
+        int[] villageChunks = SeedValidator.getVillageChunks(seed);
+        int scanRadius = 5; // chunks around village center
+
+        for (int cx = villageChunks[0] - scanRadius; cx <= villageChunks[0] + scanRadius; cx++) {
+            for (int cz = villageChunks[1] - scanRadius; cz <= villageChunks[1] + scanRadius; cz++) {
+                Chunk chunk = overworld.getChunkAt(cx, cz);
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        for (int y = 55; y < 80; y++) {
+                            Material type = chunk.getBlock(x, y, z).getType();
+                            if (type == Material.BLAST_FURNACE || type == Material.SMITHING_TABLE) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Uses Chunky command dispatch to pre-generate a world, then polls for completion.
      */
     private static void chunkyPreGen(World world, int radiusBlocks, Runnable onComplete) {
@@ -226,17 +354,14 @@ public class WorldTemplateManager {
 
     /**
      * Checks if Chunky is currently running a task for a given world.
-     * Uses the Chunky API service if available, falls back to a heuristic.
      */
     private static boolean isChunkyRunningForWorld(String worldName) {
         try {
-            // Try to use Chunky's API via service provider
             var provider = Bukkit.getServicesManager().getRegistration(
                     Class.forName("org.popcraft.chunky.api.ChunkyAPI")
             );
             if (provider != null) {
                 Object api = provider.getProvider();
-                // Call isRunning(world) via reflection
                 var world = Bukkit.getWorld(worldName);
                 if (world != null) {
                     var method = api.getClass().getMethod("isRunning", World.class);
@@ -244,13 +369,7 @@ public class WorldTemplateManager {
                 }
             }
         } catch (Exception ignored) {
-            // API not available, use fallback
         }
-
-        // Fallback: check if Chunky plugin has active generation tasks
-        // Chunky stores running tasks internally; if we can't access the API,
-        // assume it's done after a generous timeout. This is handled by the
-        // polling task running for a maximum duration.
         return false;
     }
 

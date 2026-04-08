@@ -3,8 +3,11 @@ package host.plas.furyspeedrunning.config;
 import gg.drak.thebase.storage.resources.flat.simple.SimpleConfiguration;
 import host.plas.furyspeedrunning.FurySpeedrunning;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MainConfig extends SimpleConfiguration {
@@ -14,7 +17,7 @@ public class MainConfig extends SimpleConfiguration {
 
     @Override
     public void init() {
-        getSeeds();
+        getSeedPairs();
         getWorldPrefix();
         getLobbySpawnX();
         getLobbySpawnY();
@@ -22,7 +25,7 @@ public class MainConfig extends SimpleConfiguration {
         getLobbySpawnYaw();
         getLobbySpawnPitch();
         getLobbySpawnWorld();
-        getTemplatePreGenRadius();
+        getPreGenRadius();
         getMaxPlayers();
         getGameStartCountdown();
         getPostWinDelay();
@@ -30,35 +33,57 @@ public class MainConfig extends SimpleConfiguration {
         getLootObsidianChance();
         getMobPearlDropRate();
         getMobBlazeRodDropRate();
+        getPiglinPearlRate();
+        getPlayedSeedIndices();
     }
 
     @SuppressWarnings("unchecked")
-    public List<Long> getSeeds() {
+    public List<SeedPair> getSeedPairs() {
         reloadResource();
-        // Curated seeds for 1.16 speedrunning — good structure proximity and loot
-        List<Long> defaults = Arrays.asList(
-                -4530634556500121041L, // Village + ruined portal near spawn
-                6440029834698013982L,  // Close stronghold, nether fortress
-                -1894252613L,          // Village at spawn with blacksmith
-                2483313382402348964L,  // Dual village spawn, close fortress
-                -7866608132722458683L, // Close bastion + fortress combo
-                1935762657302024089L,  // Shipwreck + village near spawn
-                -3294725893620991126L, // Double village, close stronghold
-                5765923602036276498L,  // Ruined portal, village, close end
-                -8767654563534078661L, // Bastion + fortress close, village
-                725729218939607560L    // Good nether, close structures
+        // Curated seed pairs for 1.16 speedrunning — overworld seed is also used for the end
+        List<Map<String, Long>> defaults = Arrays.asList(
+                seedEntry(-4530634556500121041L, 3257840388504953787L),
+                seedEntry(6440029834698013982L, -7789039675687883082L),
+                seedEntry(-1894252613L, 8834246424662967901L),
+                seedEntry(2483313382402348964L, -2223549622041829018L),
+                seedEntry(-7866608132722458683L, 5765438034165498430L),
+                seedEntry(1935762657302024089L, -6601736963498508847L),
+                seedEntry(-3294725893620991126L, 1122334455667788990L),
+                seedEntry(5765923602036276498L, -8988776655443322110L),
+                seedEntry(-8767654563534078661L, 4466778899001122334L),
+                seedEntry(725729218939607560L, -3344556677889900112L)
         );
         Object raw = getOrSetDefault("seeds", defaults);
         if (raw instanceof List) {
-            return ((List<?>) raw).stream()
-                    .map(o -> {
-                        if (o instanceof Long) return (Long) o;
-                        if (o instanceof Integer) return ((Integer) o).longValue();
-                        return Long.parseLong(o.toString());
-                    })
-                    .collect(Collectors.toList());
+            List<?> list = (List<?>) raw;
+            List<SeedPair> pairs = new ArrayList<>();
+            for (Object entry : list) {
+                if (entry instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) entry;
+                    long overworld = toLong(map.get("overworld"));
+                    long nether = toLong(map.get("nether"));
+                    pairs.add(new SeedPair(overworld, nether));
+                }
+            }
+            if (!pairs.isEmpty()) return pairs;
         }
-        return defaults;
+        return defaults.stream()
+                .map(m -> new SeedPair(m.get("overworld"), m.get("nether")))
+                .collect(Collectors.toList());
+    }
+
+    private static Map<String, Long> seedEntry(long overworld, long nether) {
+        Map<String, Long> map = new LinkedHashMap<>();
+        map.put("overworld", overworld);
+        map.put("nether", nether);
+        return map;
+    }
+
+    private static long toLong(Object o) {
+        if (o instanceof Long) return (Long) o;
+        if (o instanceof Integer) return ((Integer) o).longValue();
+        if (o instanceof Number) return ((Number) o).longValue();
+        return Long.parseLong(o.toString());
     }
 
     public String getWorldPrefix() {
@@ -96,9 +121,9 @@ public class MainConfig extends SimpleConfiguration {
         return getOrSetDefault("lobby.spawn.world", "");
     }
 
-    public int getTemplatePreGenRadius() {
+    public int getPreGenRadius() {
         reloadResource();
-        return getOrSetDefault("world.template-pre-gen-radius", 2000);
+        return getOrSetDefault("world.pre-gen-radius", 1200);
     }
 
     public int getMaxPlayers() {
@@ -128,11 +153,41 @@ public class MainConfig extends SimpleConfiguration {
 
     public double getMobPearlDropRate() {
         reloadResource();
-        return getOrSetDefault("loot.mob-pearl-drop-rate", 0.75d);
+        return getOrSetDefault("loot.mob-pearl-drop-rate", 0.90d);
     }
 
     public double getMobBlazeRodDropRate() {
         reloadResource();
-        return getOrSetDefault("loot.mob-blaze-rod-drop-rate", 0.80d);
+        return getOrSetDefault("loot.mob-blaze-rod-drop-rate", 0.55d);
+    }
+
+    public double getPiglinPearlRate() {
+        reloadResource();
+        return getOrSetDefault("loot.piglin-pearl-rate", 0.20d);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Integer> getPlayedSeedIndices() {
+        reloadResource();
+        List<Integer> defaults = new ArrayList<>();
+        Object raw = getOrSetDefault("played-seeds", defaults);
+        if (raw instanceof List) {
+            return ((List<?>) raw).stream()
+                    .map(o -> {
+                        if (o instanceof Integer) return (Integer) o;
+                        if (o instanceof Number) return ((Number) o).intValue();
+                        return Integer.parseInt(o.toString());
+                    })
+                    .collect(Collectors.toList());
+        }
+        return defaults;
+    }
+
+    public void addPlayedSeedIndex(int index) {
+        List<Integer> played = new ArrayList<>(getPlayedSeedIndices());
+        if (!played.contains(index)) {
+            played.add(index);
+            getOrSetDefault("played-seeds", played);
+        }
     }
 }

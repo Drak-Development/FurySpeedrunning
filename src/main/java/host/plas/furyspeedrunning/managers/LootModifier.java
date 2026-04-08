@@ -45,6 +45,43 @@ public class LootModifier {
             int count = 3 + RANDOM.nextInt(4); // 3-6
             addToEmptySlot(inventory, new ItemStack(Material.STRING, count));
         }
+
+        // Iron minimum — if chest contains any iron, ensure at least 7 total
+        if (hasIron(inventory)) {
+            ensureMinimumIron(inventory, 7);
+        }
+
+        // Blacksmith chests — guarantee at least 7 iron even if none spawned
+        if (isBlacksmithChest(tableKey)) {
+            ensureMinimumIron(inventory, 7);
+        }
+    }
+
+    private static boolean hasIron(Inventory inventory) {
+        for (int i = 0; i < inventory.getSize(); i++) {
+            ItemStack item = inventory.getItem(i);
+            if (item != null && item.getType() == Material.IRON_INGOT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Ensure a chest has at least the minimum number of iron ingots.
+     * If no iron exists, adds a new stack.
+     */
+    private static void ensureMinimumIron(Inventory inventory, int minimum) {
+        int totalIron = 0;
+        for (int i = 0; i < inventory.getSize(); i++) {
+            ItemStack item = inventory.getItem(i);
+            if (item != null && item.getType() == Material.IRON_INGOT) {
+                totalIron += item.getAmount();
+            }
+        }
+        if (totalIron < minimum) {
+            addToEmptySlot(inventory, new ItemStack(Material.IRON_INGOT, minimum - totalIron));
+        }
     }
 
     private static void addToEmptySlot(Inventory inventory, ItemStack item) {
@@ -61,6 +98,10 @@ public class LootModifier {
         } else {
             inventory.addItem(item);
         }
+    }
+
+    private static boolean isBlacksmithChest(String tableKey) {
+        return tableKey.contains("toolsmith") || tableKey.contains("weaponsmith");
     }
 
     public static void reset() {

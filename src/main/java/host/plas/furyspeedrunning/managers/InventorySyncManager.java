@@ -12,6 +12,12 @@ import java.util.List;
 
 public class InventorySyncManager {
     private static volatile boolean syncing = false;
+    private static volatile boolean syncPending = false;
+
+    // Master inventory — single source of truth
+    private static ItemStack[] masterContents = new ItemStack[36];
+    private static ItemStack[] masterArmor = new ItemStack[4];
+    private static ItemStack masterOffhand = null;
 
     public static boolean isSyncing() {
         return syncing;
@@ -31,57 +37,163 @@ public class InventorySyncManager {
         return result;
     }
 
-    public static void syncInventory(Player source) {
+    private static boolean hasCursorItem(Player player) {
+        return player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir();
+    }
+
+    /**
+     * Mark that an event-based sync is scheduled. Prevents periodic sync
+     * from pushing stale master state before the event sync runs.
+     */
+    public static void markSyncPending() {
+        syncPending = true;
+    }
+
+    /**
+     * Merge all participants' inventory changes into the master, then push to everyone.
+     * Compares each player's inventory against the current master snapshot — any slot
+     * that differs means that player changed it. This prevents item voiding when two
+     * players modify different slots on the same tick.
+     */
+    public static void syncFromPlayer(Player source) {
         if (syncing) return;
-        // Don't sync while player is mid-click (item on cursor) — incomplete state would erase items for others
-        if (source.getItemOnCursor() != null && !source.getItemOnCursor().getType().isAir()) return;
         syncing = true;
+        syncPending = false;
 
         try {
-            List<Player> players = getGameParticipants();
-            PlayerInventory sourceInv = source.getInventory();
-
-            for (Player target : players) {
-                if (target.equals(source)) continue;
-
-                PlayerInventory targetInv = target.getInventory();
-
-                // Sync main inventory (slots 0-35)
-                for (int i = 0; i < 36; i++) {
-                    ItemStack item = sourceInv.getItem(i);
-                    targetInv.setItem(i, item != null ? item.clone() : null);
-                }
-
-                // Sync armor
-                ItemStack[] armor = sourceInv.getArmorContents();
-                ItemStack[] clonedArmor = new ItemStack[armor.length];
-                for (int i = 0; i < armor.length; i++) {
-                    clonedArmor[i] = armor[i] != null ? armor[i].clone() : null;
-                }
-                targetInv.setArmorContents(clonedArmor);
-
-                // Sync offhand
-                ItemStack offhand = sourceInv.getItemInOffHand();
-                targetInv.setItemInOffHand(offhand.getType().isAir() ? null : offhand.clone());
+            mergeAllChanges();
+            for (Player p : getGameParticipants()) {
+                applyMaster(p);
             }
         } finally {
             syncing = false;
         }
     }
 
+    /**
+     * Compares every participant's inventory against the current master.
+     * Any slot that differs = a player-side change that should be adopted.
+     */
+    private static void mergeAllChanges() {
+        // Snapshot current master before comparing
+        ItemStack[] oldContents = new ItemStack[36];
+        for (int i = 0; i < 36; i++) {
+            oldContents[i] = masterContents[i] != null ? masterContents[i].clone() : null;
+        }
+        ItemStack[] oldArmor = new ItemStack[4];
+        for (int i = 0; i < 4; i++) {
+            oldArmor[i] = masterArmor[i] != null ? masterArmor[i].clone() : null;
+        }
+        ItemStack oldOffhand = masterOffhand != null ? masterOffhand.clone() : null;
+
+        for (Player p : getGameParticipants()) {
+            if (hasCursorItem(p)) continue;
+            PlayerInventory inv = p.getInventory();
+
+            for (int i = 0; i < 36; i++) {
+                ItemStack playerItem = inv.getItem(i);
+                if (!itemsEqual(playerItem, oldContents[i])) {
+                    masterContents[i] = playerItem != null ? playerItem.clone() : null;
+                }
+            }
+
+            ItemStack[] armor = inv.getArmorContents();
+            for (int i = 0; i < armor.length && i < 4; i++) {
+                if (!itemsEqual(armor[i], oldArmor[i])) {
+                    masterArmor[i] = armor[i] != null ? armor[i].clone() : null;
+                }
+            }
+
+            ItemStack offhand = inv.getItemInOffHand();
+            ItemStack playerOff = offhand.getType().isAir() ? null : offhand;
+            if (!itemsEqual(playerOff, oldOffhand)) {
+                masterOffhand = playerOff != null ? playerOff.clone() : null;
+            }
+        }
+    }
+
+    private static boolean itemsEqual(ItemStack a, ItemStack b) {
+        if (a == null || (a.getType() != null && a.getType().isAir())) a = null;
+        if (b == null || (b.getType() != null && b.getType().isAir())) b = null;
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.isSimilar(b) && a.getAmount() == b.getAmount();
+    }
+
+    /**
+     * Push master inventory to all participants. Does NOT read from any player.
+     * Used as a periodic safety net to fix drift from missed events.
+     */
+    public static void pushMasterToAll() {
+        if (syncing || syncPending) return;
+        syncing = true;
+
+        try {
+            for (Player p : getGameParticipants()) {
+                applyMaster(p);
+            }
+        } finally {
+            syncing = false;
+        }
+    }
+
+    private static void readIntoMaster(Player source) {
+        PlayerInventory inv = source.getInventory();
+
+        for (int i = 0; i < 36; i++) {
+            ItemStack item = inv.getItem(i);
+            masterContents[i] = item != null ? item.clone() : null;
+        }
+
+        ItemStack[] armor = inv.getArmorContents();
+        for (int i = 0; i < armor.length && i < 4; i++) {
+            masterArmor[i] = armor[i] != null ? armor[i].clone() : null;
+        }
+
+        ItemStack offhand = inv.getItemInOffHand();
+        masterOffhand = offhand.getType().isAir() ? null : offhand.clone();
+    }
+
+    private static void pushMasterToAllExcept(Player exclude) {
+        for (Player p : getGameParticipants()) {
+            if (p.equals(exclude)) continue;
+            applyMaster(p);
+        }
+    }
+
+    private static void applyMaster(Player target) {
+        if (hasCursorItem(target)) return;
+
+        PlayerInventory inv = target.getInventory();
+
+        for (int i = 0; i < 36; i++) {
+            inv.setItem(i, masterContents[i] != null ? masterContents[i].clone() : null);
+        }
+
+        ItemStack[] clonedArmor = new ItemStack[4];
+        for (int i = 0; i < 4; i++) {
+            clonedArmor[i] = masterArmor[i] != null ? masterArmor[i].clone() : null;
+        }
+        inv.setArmorContents(clonedArmor);
+
+        inv.setItemInOffHand(masterOffhand != null ? masterOffhand.clone() : null);
+    }
+
     public static void syncHealth(Player source) {
         if (syncing) return;
+        if (source.isDead()) return;
+        double health = source.getHealth();
+        if (health <= 0) return;
         syncing = true;
 
         try {
             List<Player> players = getGameParticipants();
-            double health = source.getHealth();
             int foodLevel = source.getFoodLevel();
             float saturation = source.getSaturation();
 
             for (Player target : players) {
-                if (target.equals(source)) continue;
-                target.setHealth(Math.max(0, Math.min(health, target.getMaxHealth())));
+                if (target.equals(source) || target.isDead()) continue;
+                target.setHealth(Math.max(1, Math.min(health, target.getMaxHealth())));
                 target.setFoodLevel(foodLevel);
                 target.setSaturation(saturation);
             }
@@ -109,7 +221,27 @@ public class InventorySyncManager {
         }
     }
 
+    /**
+     * Clear the master inventory. Called on shared death to wipe all state.
+     */
+    public static void clearMaster() {
+        masterContents = new ItemStack[36];
+        masterArmor = new ItemStack[4];
+        masterOffhand = null;
+    }
+
+    /**
+     * Initialize master from a player's current inventory. Called at game start.
+     */
+    public static void initializeMaster(Player source) {
+        readIntoMaster(source);
+    }
+
     public static void reset() {
         syncing = false;
+        syncPending = false;
+        masterContents = new ItemStack[36];
+        masterArmor = new ItemStack[4];
+        masterOffhand = null;
     }
 }
